@@ -8,10 +8,11 @@
   <action id="tech.zainiumdynamics.installer">
     <description>Install Zainium OS</description>
     <message>Installing Zainium OS erases the selected disk and needs administrator rights</message>
+    <!-- live ISO only (zaisys, removed on install): the person at the live session installs without a password, like Fedora/Ubuntu live media -->
     <defaults>
       <allow_any>auth_admin</allow_any>
       <allow_inactive>auth_admin</allow_inactive>
-      <allow_active>auth_admin_keep</allow_active>
+      <allow_active>yes</allow_active>
     </defaults>
     <annotate key="org.freedesktop.policykit.exec.path">/overlayer/zaisys/bin/zainium-install</annotate>
   </action>
