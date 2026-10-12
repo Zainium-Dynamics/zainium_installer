@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<policyconfig>
+  <vendor>Zainiumdynamics</vendor>
+  <vendor_url>https://zainiumdynamics.tech</vendor_url>
+  <icon_name>tech.zainiumdynamics.Installer</icon_name>
+  <action id="tech.zainiumdynamics.installer">
+    <description>Install Zainium OS</description>
+    <message>Installing Zainium OS erases the selected disk and needs administrator rights</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/overlayer/zaisys/bin/zainium-install</annotate>
+  </action>
+</policyconfig>

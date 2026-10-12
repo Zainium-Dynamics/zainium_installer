@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=Install Zainium OS
+Comment=Install Zainium OS to this computer
+Exec=/overlayer/zaisys/bin/zainium-installer
+Terminal=false
+Type=Application
+StartupNotify=true
+Icon=tech.zainiumdynamics.Installer
+Categories=Zainium;System;
+Keywords=Install;Installer;Zainium;OS;Setup;Disk;
+X-Zainium-Vendor=Zainiumdynamics
+X-Zainium-Website=https://zainiumdynamics.tech

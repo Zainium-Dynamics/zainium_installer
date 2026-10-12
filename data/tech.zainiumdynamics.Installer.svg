@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <!-- Zainium Installer icon — simple drive + arrow -->
+  <rect x="16" y="36" width="96" height="64" rx="10" fill="#1a1b26" stroke="#7aa2f7" stroke-width="4"/>
+  <rect x="28" y="52" width="72" height="8" rx="2" fill="#7aa2f7" opacity="0.5"/>
+  <rect x="28" y="68" width="48" height="8" rx="2" fill="#9ece6a" opacity="0.7"/>
+  <path d="M64 20 L64 48 M52 36 L64 48 L76 36" stroke="#bb9af7" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
