@@ -51,24 +51,26 @@ Limine only reads FAT, so the kernel and initramfs live on the ESP at the same p
 | 7 | Configure | see below |
 | 8 | Finish | sync, unmount, report |
 
-### Configure: base vs. union
+### Configure
 
-The copied base (`overlayer/syshub`, `overlayer/zaisys`) stays the ISO image minus everything
-live-only, so `zex syshub -u` upgrades and rollbacks work against a known base:
+Everything is written into the base (`overlayer/syshub`, `overlayer/zaisys`); `zexlib/union`
+starts empty for the user's own later changes, so a zexlib reset never loses the installation:
 
 - owners: the build host's uid/gid (≥ 1000) leak into the erofs image; the copy gives them to root
 - removed from zaisys and syshub: `bin/zainium-installer`, `bin/zainium-install`, `bin/carve`,
   `bin/cosmic-session-start` (live autologin launcher), the installer's desktop file, icon,
   polkit policy and autostart entry
 - greetd `[initial_session]` (live autologin) stripped
-- live user `zainium` removed from passwd/shadow/group, root locked, shadow 0600 — a zexlib reset
-  can never bring back the ISO's well-known passwords
+- live user `zainium` removed, root locked (or given the chosen password), shadow 0600
+- the new user (uid 1000, the live user's groups, wheel if administrator), hostname + hosts,
+  `localtime`, `locale.conf` + `profile.d/zainium-locale.sh` + systemd `DefaultEnvironment=LANG`,
+  `vconsole.conf`, COSMIC `xkb_config` (system default for the greeter and new users).
+  Non-Latin layouts get `us` as a second layout (Alt+Shift).
 
-Machine settings go to `overlayer/zexlib/union`, exactly where they land when changed on the
-running system: passwd/shadow/group with the new user (uid 1000, the live user's groups, wheel if
-administrator), hostname + hosts, `localtime`, `locale.conf` + `profile.d/zainium-locale.sh` +
-systemd `DefaultEnvironment=LANG`, `vconsole.conf`, COSMIC `xkb_config` (system default for the
-greeter and new users). Non-Latin layouts get `us` as a second layout (Alt+Shift).
+`zex syshub -u` never replaces account or machine files (zex `syshub_pending::PROTECTED`:
+passwd, shadow, group, gshadow, subuid, subgid, hostname, hosts, machine-id, localtime,
+locale.conf, vconsole.conf, greetd config.toml, COSMIC xkb_config). New system accounts come
+from systemd-sysusers, never from a shipped passwd.
 
 `home/<user>` is created from the live user's home, owned by the new user, mode 0700.
 

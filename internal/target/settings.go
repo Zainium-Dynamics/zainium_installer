@@ -11,10 +11,10 @@ var liveHostRe = regexp.MustCompile(`(^|\s)` + LiveUser + `(\s|$)`)
 
 // SetHostname writes etc/hostname and points the 127.0.1.1 / ::1 aliases at it.
 func (t Target) SetHostname(name string) error {
-	if err := t.WriteUnion("etc/hostname", []byte(name+"\n"), 0o644); err != nil {
+	if err := t.WriteSetting("etc/hostname", []byte(name+"\n"), 0o644); err != nil {
 		return err
 	}
-	b, err := t.readMerged("etc/hosts")
+	b, err := t.read("etc/hosts")
 	if err != nil {
 		b = []byte("127.0.0.1   localhost\n::1         localhost\n")
 	}
@@ -31,7 +31,7 @@ func (t Target) SetHostname(name string) error {
 	if !found {
 		lines = append(lines, "127.0.1.1   "+name)
 	}
-	return t.WriteUnion("etc/hosts", []byte(strings.Join(lines, "\n")+"\n"), 0o644)
+	return t.WriteSetting("etc/hosts", []byte(strings.Join(lines, "\n")+"\n"), 0o644)
 }
 
 // SetTimezone links etc/localtime to the zoneinfo file.
@@ -43,7 +43,7 @@ func (t Target) SetTimezone(tz string) error {
 	if _, err := os.Stat(t.Syshub("share/zoneinfo/" + tz)); err != nil {
 		return fmt.Errorf("time zone %q is not in zoneinfo", tz)
 	}
-	return t.SymlinkUnion("etc/localtime", zone)
+	return t.LinkSetting("etc/localtime", zone)
 }
 
 // SetLanguage writes locale.conf and makes login shells and systemd use it.
@@ -51,14 +51,14 @@ func (t Target) SetLanguage(lang string) error {
 	if lang == "" {
 		lang = "en_US.UTF-8"
 	}
-	if err := t.WriteUnion("etc/locale.conf", []byte("LANG="+lang+"\n"), 0o644); err != nil {
+	if err := t.WriteSetting("etc/locale.conf", []byte("LANG="+lang+"\n"), 0o644); err != nil {
 		return err
 	}
 	// etc/profile exports en_US.UTF-8 first, then sources profile.d
-	if err := t.WriteUnion("etc/profile.d/zainium-locale.sh", []byte("export LANG=\""+lang+"\"\n"), 0o644); err != nil {
+	if err := t.WriteSetting("etc/profile.d/zainium-locale.sh", []byte("export LANG=\""+lang+"\"\n"), 0o644); err != nil {
 		return err
 	}
-	return t.WriteUnion("etc/systemd/system.conf.d/50-zainium-locale.conf",
+	return t.WriteSetting("etc/systemd/system.conf.d/50-zainium-locale.conf",
 		[]byte("[Manager]\nDefaultEnvironment=LANG="+lang+"\n"), 0o644)
 }
 
@@ -77,11 +77,11 @@ func (t Target) SetKeyboard(layout, variant string) error {
 		first, _, _ := strings.Cut(layout, ",")
 		vc = "KEYMAP=" + first + "\n" + vc
 	}
-	if err := t.WriteUnion("etc/vconsole.conf", []byte(vc), 0o644); err != nil {
+	if err := t.WriteSetting("etc/vconsole.conf", []byte(vc), 0o644); err != nil {
 		return err
 	}
 	// system-wide default for cosmic-comp (greeter and new users), cosmic-config RON format
-	return t.WriteUnion("share/cosmic/com.system76.CosmicComp/v1/xkb_config", []byte(XkbRON(layout, variant, options)), 0o644)
+	return t.WriteSetting("share/cosmic/com.system76.CosmicComp/v1/xkb_config", []byte(XkbRON(layout, variant, options)), 0o644)
 }
 
 // SwitchOption switches between several keyboard layouts with Alt+Shift.

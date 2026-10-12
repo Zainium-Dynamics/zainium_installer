@@ -138,11 +138,11 @@ func (t Target) RemoveLiveUser() ([]string, error) {
 	return groups, nil
 }
 
-// AddUser writes the new accounts into the union and returns the user's uid and gid.
+// AddUser adds the user to the base account files and returns the user's uid and gid.
 func (t Target) AddUser(u plan.User, rootPassword string, groups []string) (int, int, error) {
 	tabs := map[string]*table{}
 	for _, af := range accountFiles {
-		b, err := t.readMerged(af.rel)
+		b, err := t.read(af.rel)
 		if errors.Is(err, os.ErrNotExist) {
 			continue
 		} else if err != nil {
@@ -204,7 +204,7 @@ func (t Target) AddUser(u plan.User, rootPassword string, groups []string) (int,
 
 	for _, af := range accountFiles {
 		if tb := tabs[af.rel]; tb != nil {
-			if err := t.WriteUnion(af.rel, tb.bytes(), af.mode); err != nil {
+			if err := t.WriteSetting(af.rel, tb.bytes(), af.mode); err != nil {
 				return 0, 0, err
 			}
 		}

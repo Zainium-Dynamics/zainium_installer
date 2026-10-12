@@ -1,8 +1,9 @@
 // Package target turns the copied live image into an installed system.
 //
-// The base copy (overlayer/syshub, overlayer/zaisys) stays the ISO's image minus everything
-// live-only. Machine settings go to overlayer/zexlib/union, exactly where they would land if
-// set on the running system, so `zex syshub -u` upgrades of the base never overwrite them.
+// Everything is written into the base (overlayer/syshub, overlayer/zaisys): live-only files are
+// removed and machine settings (accounts, host name, locale, keyboard, time zone) are written
+// there, so they survive a zexlib reset. `zex syshub -u` never replaces these settings (its
+// PROTECTED list), and zexlib/union starts empty for the user's own changes.
 package target
 
 import (
@@ -142,49 +143,26 @@ func chown(path string, uid, gid int) error {
 	return os.Lchown(path, uid, gid)
 }
 
-// unionDir creates rel inside the union with the same mode and owner as the base dir, since
-// overlayfs shows the upper dir's metadata for a merged directory.
-func (t Target) unionDir(rel string) (string, error) {
-	rel = filepath.Clean(rel)
-	if rel == "." {
-		return t.Union(""), nil
-	}
-	if _, err := t.unionDir(filepath.Dir(rel)); err != nil {
-		return "", err
-	}
-	p := t.Union(rel)
-	if _, err := os.Lstat(p); err == nil {
-		return p, nil
-	}
-	mode, uid, gid := os.FileMode(0o755), 0, 0
-	if fi, err := os.Stat(t.Syshub(rel)); err == nil {
-		mode = fi.Mode().Perm()
-		uid, gid = owner(fi)
-	}
-	if err := os.Mkdir(p, mode); err != nil {
-		return "", err
-	}
-	if err := chown(p, uid, gid); err != nil {
-		return "", err
-	}
-	return p, os.Chmod(p, mode)
+// baseDir creates rel's directories inside syshub (root, 0755) when missing.
+func (t Target) baseDir(rel string) error {
+	return os.MkdirAll(t.Syshub(filepath.Dir(rel)), 0o755)
 }
 
-// WriteUnion writes a machine setting at rel (a path inside syshub) into the union.
-func (t Target) WriteUnion(rel string, data []byte, mode os.FileMode) error {
-	if _, err := t.unionDir(filepath.Dir(rel)); err != nil {
+// WriteSetting writes a machine setting at rel (a path inside syshub).
+func (t Target) WriteSetting(rel string, data []byte, mode os.FileMode) error {
+	if err := t.baseDir(rel); err != nil {
 		return err
 	}
 	t.logf("wrote %s", rel)
-	return writeFile(t.Union(rel), data, mode, 0, 0)
+	return writeFile(t.Syshub(rel), data, mode, 0, 0)
 }
 
-// SymlinkUnion makes rel inside the union a symlink.
-func (t Target) SymlinkUnion(rel, target string) error {
-	if _, err := t.unionDir(filepath.Dir(rel)); err != nil {
+// LinkSetting makes rel inside syshub a symlink.
+func (t Target) LinkSetting(rel, target string) error {
+	if err := t.baseDir(rel); err != nil {
 		return err
 	}
-	p := t.Union(rel)
+	p := t.Syshub(rel)
 	os.Remove(p)
 	t.logf("linked %s -> %s", rel, target)
 	if err := os.Symlink(target, p); err != nil {
@@ -193,10 +171,4 @@ func (t Target) SymlinkUnion(rel, target string) error {
 	return chown(p, 0, 0)
 }
 
-// readMerged reads rel as the installed system will see it: union first, then base.
-func (t Target) readMerged(rel string) ([]byte, error) {
-	if b, err := os.ReadFile(t.Union(rel)); err == nil {
-		return b, nil
-	}
-	return os.ReadFile(t.Syshub(rel))
-}
+func (t Target) read(rel string) ([]byte, error) { return os.ReadFile(t.Syshub(rel)) }

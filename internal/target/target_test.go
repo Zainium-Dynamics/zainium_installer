@@ -100,6 +100,12 @@ func TestInstallFlow(t *testing.T) {
 	if strings.Contains(base, "zainium") || !strings.HasPrefix(base, "root:!:") {
 		t.Errorf("base shadow:\n%s", base)
 	}
+	defer func() {
+		// nothing may land in the union: a zexlib reset must keep the installed settings
+		if es, _ := os.ReadDir(tg.Root + "/overlayer/zexlib/union"); len(es) != 0 {
+			t.Errorf("union is not empty: %v", es)
+		}
+	}()
 	if fi, _ := os.Stat(tg.Syshub("etc/shadow")); fi.Mode().Perm() != 0o600 {
 		t.Errorf("shadow mode %v", fi.Mode())
 	}
@@ -111,17 +117,17 @@ func TestInstallFlow(t *testing.T) {
 	if uid != 1000 || gid != 1000 {
 		t.Errorf("uid %d gid %d", uid, gid)
 	}
-	pw := read(t, tg.Union("etc/passwd"))
+	pw := read(t, tg.Syshub("etc/passwd"))
 	if !strings.Contains(pw, "ali:x:1000:1000:Ali Zain:/home/ali:/overlayer/syshub/bin/bash") || strings.Contains(pw, "zainium") {
 		t.Errorf("passwd:\n%s", pw)
 	}
-	gr := read(t, tg.Union("etc/group"))
+	gr := read(t, tg.Syshub("etc/group"))
 	for _, want := range []string{"wheel:x:11:ali", "input:x:19:cosmic-greeter,ali", "ali:x:1000:"} {
 		if !strings.Contains(gr, want) {
 			t.Errorf("group missing %q:\n%s", want, gr)
 		}
 	}
-	sh := read(t, tg.Union("etc/shadow"))
+	sh := read(t, tg.Syshub("etc/shadow"))
 	var hash string
 	for _, l := range strings.Split(sh, "\n") {
 		if strings.HasPrefix(l, "ali:") {
@@ -143,11 +149,11 @@ func TestInstallFlow(t *testing.T) {
 		}
 	}
 	must(tg.SetHostname("zbox"))
-	if h := read(t, tg.Union("etc/hosts")); !strings.Contains(h, "127.0.1.1   zbox") || !strings.Contains(h, "::1         localhost zbox") {
+	if h := read(t, tg.Syshub("etc/hosts")); !strings.Contains(h, "127.0.1.1   zbox") || !strings.Contains(h, "::1         localhost zbox") {
 		t.Errorf("hosts:\n%s", h)
 	}
 	must(tg.SetTimezone("Asia/Karachi"))
-	if l, _ := os.Readlink(tg.Union("etc/localtime")); l != "/overlayer/syshub/share/zoneinfo/Asia/Karachi" {
+	if l, _ := os.Readlink(tg.Syshub("etc/localtime")); l != "/overlayer/syshub/share/zoneinfo/Asia/Karachi" {
 		t.Errorf("localtime -> %s", l)
 	}
 	if tg.SetTimezone("Mars/Base") == nil {
@@ -155,7 +161,7 @@ func TestInstallFlow(t *testing.T) {
 	}
 	must(tg.SetLanguage("de_DE.UTF-8"))
 	must(tg.SetKeyboard("de", "nodeadkeys"))
-	if x := read(t, tg.Union("share/cosmic/com.system76.CosmicComp/v1/xkb_config")); !strings.Contains(x, `layout: "de"`) || !strings.Contains(x, `variant: "nodeadkeys"`) {
+	if x := read(t, tg.Syshub("share/cosmic/com.system76.CosmicComp/v1/xkb_config")); !strings.Contains(x, `layout: "de"`) || !strings.Contains(x, `variant: "nodeadkeys"`) {
 		t.Errorf("xkb:\n%s", x)
 	}
 }
