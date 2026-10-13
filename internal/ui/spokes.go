@@ -359,7 +359,7 @@ func (a *App) hostSpoke(gtx layout.Context) layout.Dimensions {
 		}),
 		vspace(18),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return editorBox(a.th, gtx, &a.hostname, "Host name", a.deviceName, msg, mc)
+			return editorBox(a.th, gtx, &a.hostname, "Host name", defaultHostname, msg, mc)
 		}),
 		vspace(8),
 		layout.Rigid(label(a.th, 12, "Letters, digits and dashes. You can change it later in Settings.", colDim, font.Normal).Layout),

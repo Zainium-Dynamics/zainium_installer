@@ -49,6 +49,9 @@ const (
 	pageDone
 )
 
+// defaultHostname is the OS name, so every install shows user@zainium; the user can change it.
+const defaultHostname = "zainium"
+
 type App struct {
 	w    *app.Window
 	th   *material.Theme
@@ -172,7 +175,7 @@ func newApp(w *app.Window) *App {
 	a.deviceName = catalog.DeviceName()
 	a.hostname.SingleLine = true
 	a.kbTest.SingleLine = true
-	a.hostname.SetText(a.deviceName)
+	a.hostname.SetText(defaultHostname)
 	for _, e := range []*widget.Editor{&a.rootPw, &a.rootPw2, &a.userPw, &a.userPw2} {
 		e.SingleLine = true
 		e.Mask = '•'
