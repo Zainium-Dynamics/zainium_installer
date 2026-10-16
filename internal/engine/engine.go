@@ -121,7 +121,7 @@ func (e *Engine) check() error {
 		}
 	}
 	e.srcBytes = 0
-	for _, dir := range []string{"overlayer/syshub", "overlayer/zaisys", "root", "home/" + target.LiveUser} {
+	for _, dir := range append(overlayerDirs(e.Source), "root", "home/"+target.LiveUser) {
 		n, _, err := copytree.Measure(filepath.Join(e.Source, dir), nil)
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
@@ -317,6 +317,18 @@ func baseOwner(uid, gid uint32) (uint32, uint32) {
 	return uid, gid
 }
 
+// overlayerDirs lists the live image's overlayer directories (syshub, zaisys, agents, ...); zexlib starts empty.
+func overlayerDirs(src string) []string {
+	dirs := []string{"overlayer/syshub", "overlayer/zaisys"}
+	entries, _ := os.ReadDir(filepath.Join(src, "overlayer"))
+	for _, en := range entries {
+		if n := en.Name(); en.IsDir() && !strings.HasPrefix(n, ".") && n != "syshub" && n != "zaisys" && n != "zexlib" {
+			dirs = append(dirs, "overlayer/"+n)
+		}
+	}
+	return dirs
+}
+
 func (e *Engine) copy() error {
 	t := e.root()
 	for _, d := range []struct {
@@ -345,7 +357,7 @@ func (e *Engine) copy() error {
 			e.R.Percent(min(pct, 86), fmt.Sprintf("Copying Zainium OS (%s of %s)", disk.HumanSize(base+n), disk.HumanSize(e.srcBytes)))
 		}
 	}
-	for _, dir := range []string{"overlayer/syshub", "overlayer/zaisys", "root"} {
+	for _, dir := range append(overlayerDirs(e.Source), "root") {
 		src := filepath.Join(e.Source, dir)
 		if _, err := os.Stat(src); err != nil {
 			continue
