@@ -369,6 +369,48 @@ func (e *Engine) copy() error {
 		}
 		done += n
 	}
+	return copyOverlayerFiles(e.Source, t)
+}
+
+// copyOverlayerFiles copies the files and symlinks that sit beside the overlayer directories
+// (README.zainium, architecture.md, zex.md, ...), owned by root like the rest of the base.
+func copyOverlayerFiles(src, dst string) error {
+	entries, err := os.ReadDir(filepath.Join(src, "overlayer"))
+	if err != nil {
+		return err
+	}
+	for _, en := range entries {
+		from := filepath.Join(src, "overlayer", en.Name())
+		to := filepath.Join(dst, "overlayer", en.Name())
+		switch {
+		case en.Type()&os.ModeSymlink != 0:
+			target, err := os.Readlink(from)
+			if err != nil {
+				return err
+			}
+			os.Remove(to)
+			if err := os.Symlink(target, to); err != nil {
+				return err
+			}
+		case en.Type().IsRegular():
+			info, err := en.Info()
+			if err != nil {
+				return err
+			}
+			data, err := os.ReadFile(from)
+			if err != nil {
+				return err
+			}
+			if err := os.WriteFile(to, data, info.Mode().Perm()); err != nil {
+				return err
+			}
+			if err := os.Chown(to, 0, 0); err != nil {
+				return err
+			}
+		default:
+			continue
+		}
+	}
 	return nil
 }
 
