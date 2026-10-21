@@ -23,7 +23,8 @@ var InstallerFiles = []string{
 	"bin/zainium-installer",
 	"bin/zainium-install",
 	"bin/carve",
-	"bin/cosmic-session-start", // live autologin launcher (HOME in /tmp)
+	"bin/cosmic-session-start",             // live autologin launcher (HOME in /tmp)
+	"etc/elevators/elevate.toml.d/10-live", // live user's elevate without a password
 	"share/applications/tech.zainiumdynamics.Installer.desktop",
 	"share/icons/hicolor/scalable/apps/tech.zainiumdynamics.Installer.svg",
 	"share/polkit-1/actions/tech.zainiumdynamics.installer.policy",
