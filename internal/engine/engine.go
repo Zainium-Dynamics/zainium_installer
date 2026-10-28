@@ -270,7 +270,8 @@ func (e *Engine) format() error {
 	e.R.Percent(6, "")
 
 	e.rootUUID = newUUID()
-	out, err := exec.Command("mkfs.ext4", "-F", "-q", "-L", RootLabel, "-U", e.rootUUID, e.rootDev).CombinedOutput()
+	// verity: quantra-ramfs turns on fs-verity for every base file, so its content cannot be rewritten
+	out, err := exec.Command("mkfs.ext4", "-F", "-q", "-O", "verity", "-L", RootLabel, "-U", e.rootUUID, e.rootDev).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("mkfs.ext4 %s: %v: %s", e.rootDev, err, strings.TrimSpace(string(out)))
 	}
