@@ -337,7 +337,7 @@ func (e *Engine) copy() error {
 		mode os.FileMode
 	}{
 		{"overlayer", 0o755}, {"overlayer/zexlib", 0o755}, {"overlayer/zexlib/union", 0o755},
-		{"overlayer/zexlib/work", 0o700}, {"overlayer/zexlib/var", 0o755}, {"home", 0o755},
+		{"overlayer/zexlib/work", 0o700}, {"home", 0o755},
 	} {
 		p := filepath.Join(t, d.path)
 		if err := os.MkdirAll(p, d.mode); err != nil {
