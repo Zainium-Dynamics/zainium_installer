@@ -29,7 +29,7 @@ ESP (FAT32, 1 GiB)                       root (ext4, rest of disk, label zainium
 │                          limine.install.conf)                  (installer removed)
 ├── limine-bios.sys        (BIOS boot)   ├── overlayer/zexlib/{union,work,var}  empty
 └── overlayer/zaisys/kernel/             ├── home/<user>
-    ├── linux-evl                        └── root/
+    ├── linux-zainium                    └── root/
     ├── linux-panic
     └── quantra-ramfs.img
 ```

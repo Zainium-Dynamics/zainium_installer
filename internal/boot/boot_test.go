@@ -3,6 +3,7 @@ package boot
 import (
 	"encoding/binary"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -14,7 +15,7 @@ func TestConfigFromStaging(t *testing.T) {
 	if err != nil {
 		t.Skip("no staging tree")
 	}
-	conf, err := Config(tmpl, "d5198031-6720-4d08-aae8-0915abdede4d", "ext4")
+	conf, err := Config(tmpl, "d5198031-6720-4d08-aae8-0915abdede4d", "ext4", "some-kernel")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -22,18 +23,32 @@ func TestConfigFromStaging(t *testing.T) {
 	if strings.Contains(s, "${") || !strings.Contains(s, "root=UUID=d5198031-6720-4d08-aae8-0915abdede4d rootfstype=ext4") {
 		t.Fatalf("config:\n%s", s)
 	}
-	for _, p := range []string{"boot():/overlayer/zaisys/kernel/linux-evl", "boot():/overlayer/zaisys/kernel/quantra-ramfs.img"} {
+	for _, p := range []string{"boot():/overlayer/zaisys/kernel/some-kernel", "boot():/overlayer/zaisys/kernel/quantra-ramfs.img"} {
 		if !strings.Contains(s, p) {
 			t.Errorf("missing %s", p)
 		}
-		dst := strings.TrimPrefix(p, "boot():/")
-		found := false
-		for _, v := range espFiles {
-			found = found || v == dst
+	}
+}
+
+func TestKernelIsFoundByWhatIsThere(t *testing.T) {
+	z := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(z, "kernel"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{"linux-anything", FallbackKernel, "quantra-ramfs.img", "quantra-ramfs-panic.img"} {
+		if err := os.WriteFile(filepath.Join(z, "kernel", f), nil, 0o644); err != nil {
+			t.Fatal(err)
 		}
-		if !found {
-			t.Errorf("%s is referenced by limine.conf but not copied to the ESP", dst)
-		}
+	}
+	k, err := Kernel(z)
+	if err != nil || k != "linux-anything" {
+		t.Fatalf("Kernel() = %q, %v", k, err)
+	}
+	if err := os.WriteFile(filepath.Join(z, "kernel", "linux-other"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Kernel(z); err == nil {
+		t.Fatal("two kernels: want an error")
 	}
 }
 

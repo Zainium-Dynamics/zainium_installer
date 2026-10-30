@@ -115,10 +115,13 @@ func (e *Engine) check() error {
 			return err
 		}
 	}
-	for _, p := range []string{"overlayer/syshub/etc/passwd", "overlayer/zaisys/kernel/linux-evl", "overlayer/zaisys/limine/limine.install.conf"} {
+	for _, p := range []string{"overlayer/syshub/etc/passwd", "overlayer/zaisys/limine/limine.install.conf"} {
 		if _, err := os.Stat(filepath.Join(e.Source, p)); err != nil {
 			return fmt.Errorf("the live image at %s is incomplete: %s missing", e.Source, p)
 		}
+	}
+	if _, err := boot.Kernel(filepath.Join(e.Source, "overlayer/zaisys")); err != nil {
+		return fmt.Errorf("the live image at %s has no kernel to boot: %w", e.Source, err)
 	}
 	e.srcBytes = 0
 	for _, dir := range append(overlayerDirs(e.Source), "root", "home/"+target.LiveUser) {
