@@ -470,6 +470,9 @@ func (e *Engine) configure() error {
 	} else if err := os.Mkdir(home, 0o700); err != nil {
 		return err
 	}
+	if err := t.DropInstallerPin(home); err != nil {
+		return err
+	}
 	if err := os.Chown(home, uid, gid); err != nil {
 		return err
 	}

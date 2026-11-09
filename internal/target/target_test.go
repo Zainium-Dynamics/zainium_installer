@@ -165,3 +165,21 @@ func TestInstallFlow(t *testing.T) {
 		t.Errorf("xkb:\n%s", x)
 	}
 }
+
+func TestDropInstallerPin(t *testing.T) {
+	home := t.TempDir()
+	dir := filepath.Join(home, ".config/cosmic/com.system76.CosmicAppList/v1")
+	os.MkdirAll(dir, 0o755)
+	in := "[\n    \"tech.zainiumdynamics.Installer\",\n    \"com.system76.CosmicFiles\",\n]\n"
+	os.WriteFile(filepath.Join(dir, "favorites"), []byte(in), 0o644)
+	if err := (Target{}).DropInstallerPin(home); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(filepath.Join(dir, "favorites"))
+	if want := "[\n    \"com.system76.CosmicFiles\",\n]\n"; string(b) != want {
+		t.Fatalf("got %q", b)
+	}
+	if err := (Target{}).DropInstallerPin(t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+}

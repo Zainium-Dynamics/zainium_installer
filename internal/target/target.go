@@ -66,6 +66,34 @@ func (t Target) RemoveInstaller() error {
 	return nil
 }
 
+// installerApp is the installer's desktop ID, pinned in the live user's dock.
+const installerApp = "tech.zainiumdynamics.Installer"
+
+// DropInstallerPin takes the installer out of the dock favorites in home, which is
+// copied from the live user: the installed system has no installer, so the pin would
+// show as an empty gear icon.
+func (t Target) DropInstallerPin(home string) error {
+	p := filepath.Join(home, ".config/cosmic/com.system76.CosmicAppList/v1/favorites")
+	b, err := os.ReadFile(p)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	var out []string
+	for _, l := range strings.Split(string(b), "\n") {
+		if strings.Contains(l, `"`+installerApp+`"`) {
+			continue
+		}
+		out = append(out, l)
+	}
+	if len(out) == len(strings.Split(string(b), "\n")) {
+		return nil
+	}
+	t.logf("removed the installer from the dock in %s", p)
+	return os.WriteFile(p, []byte(strings.Join(out, "\n")), 0o644)
+}
+
 // pruneEmpty removes now-empty directories up to (not including) stop.
 func pruneEmpty(dir, stop string) {
 	for dir != stop && strings.HasPrefix(dir, stop) {
