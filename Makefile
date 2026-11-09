@@ -49,6 +49,8 @@ install: all
 	install -Dm644 data/tech.zainiumdynamics.Installer.desktop $(DESTDIR)/overlayer/zaisys/share/applications/tech.zainiumdynamics.Installer.desktop
 	install -Dm644 data/tech.zainiumdynamics.Installer.svg $(DESTDIR)/overlayer/zaisys/share/icons/hicolor/scalable/apps/tech.zainiumdynamics.Installer.svg
 	install -Dm644 data/tech.zainiumdynamics.installer.policy $(DESTDIR)/overlayer/zaisys/share/polkit-1/actions/tech.zainiumdynamics.installer.policy
+	# polkitd reads actions only from the base; RemoveInstaller deletes it on install
+	install -Dm644 data/tech.zainiumdynamics.installer.policy $(DESTDIR)/overlayer/syshub/share/polkit-1/actions/tech.zainiumdynamics.installer.policy
 
 clean:
 	rm -rf $(BUILD)
