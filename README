@@ -1,0 +1,47 @@
+zainium-installer
+=================
+
+The installer of Zainium OS. It puts the system from the live ISO onto a disk.
+
+It has two parts:
+
+    zainium-installer   the graphical installer, run by the live user
+    zainium-install     the install engine, run as root through pkexec
+
+The engine can also be used on its own for scripted installs.
+
+What it does
+------------
+
+  - erases the chosen disk and makes a GPT with an EFI partition and a root
+    partition (ext4 with the verity feature)
+  - copies the base from the live image, without the live-only files
+  - installs Limine and the kernels on the EFI partition, and adds a UEFI
+    boot entry; legacy BIOS boot is set up too
+  - creates your user, root password, host name, language, keyboard and
+    time zone, written into the base so they survive a userland reset
+  - removes the live user, its autologin and the installer itself
+
+The installer erases the whole disk it is given. Installing next to another
+system is not supported yet.
+
+Building
+--------
+
+On Zainium OS:
+
+    make
+    make install DESTDIR=<zairoot>
+
+This puts both programs and their desktop entry, icon and polkit policy into
+overlayer/zaisys of the live root, and the policy into overlayer/syshub too,
+where polkitd reads it.
+
+Tests:
+
+    go test ./internal/...
+
+License
+-------
+
+GPL-3.0.
