@@ -25,7 +25,7 @@ var spokeTitles = map[page]string{
 }
 
 func (a *App) layoutSpoke(gtx layout.Context) {
-	if a.doneBtn.Clicked(gtx) {
+	if a.doneBtn.Clicked(gtx) || a.backBtn.Clicked(gtx) {
 		a.page = pageHub
 		a.w.Invalidate()
 	}
@@ -87,6 +87,10 @@ func (a *App) spokeFooter(gtx layout.Context) layout.Dimensions {
 					return l.Layout(gtx)
 				}),
 				hspace(16),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return button(a.th, gtx, &a.backBtn, "Back", false, true)
+				}),
+				hspace(12),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					return button(a.th, gtx, &a.doneBtn, "Done", true, true)
 				}),

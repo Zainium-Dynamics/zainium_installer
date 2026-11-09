@@ -88,9 +88,9 @@ type App struct {
 
 	tiles []*tile
 
-	continueBtn, quitBtn, beginBtn, doneBtn, restartBtn, detailsBtn widget.Clickable
-	showDetails                                                     bool
-	hubList, spokeList, logList                                     widget.List
+	continueBtn, quitBtn, beginBtn, doneBtn, restartBtn, detailsBtn, backBtn widget.Clickable
+	showDetails                                                              bool
+	hubList, spokeList, logList                                              widget.List
 
 	inst *installer
 	deco widget.Decorations

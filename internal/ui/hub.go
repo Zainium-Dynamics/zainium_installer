@@ -104,6 +104,10 @@ func (a *App) layoutHub(gtx layout.Context) {
 	if a.quitBtn.Clicked(gtx) {
 		os.Exit(0)
 	}
+	if a.backBtn.Clicked(gtx) {
+		a.page = pageWelcome
+		a.w.Invalidate()
+	}
 	ready := a.allComplete()
 	if a.beginBtn.Clicked(gtx) && ready {
 		a.startInstall()
@@ -233,6 +237,10 @@ func (a *App) hubFooter(gtx layout.Context, ready bool) layout.Dimensions {
 				return layout.Inset{Top: 14, Bottom: 14, Left: 40, Right: 40}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
 						layout.Flexed(1, label(a.th, 13, "Nothing is written to your disks until you click Begin Installation.", colDim, font.Normal).Layout),
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							return button(a.th, gtx, &a.backBtn, "Back", false, true)
+						}),
+						hspace(12),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							return button(a.th, gtx, &a.quitBtn, "Quit", false, true)
 						}),
