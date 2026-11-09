@@ -25,6 +25,8 @@ What it does
 The installer erases the whole disk it is given. Installing next to another
 system is not supported yet.
 
+A screenshot of the first page is in screenshots/welcome.png.
+
 Building
 --------
 
