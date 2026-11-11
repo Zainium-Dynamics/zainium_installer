@@ -163,7 +163,27 @@ func (l *Layout) Write(f *os.File) error {
 			return err
 		}
 	}
+	return l.writeTables(f, true)
+}
 
+// Update writes the partition entries and both GPT headers of a disk that keeps its other
+// systems: the MBR and every existing partition stay as they are. Only the first MiB of the
+// partitions numbered in fresh is cleared, so no old file system signature is left there.
+func (l *Layout) Update(f *os.File, fresh []int) error {
+	zero := make([]byte, mib)
+	for _, n := range fresh {
+		if _, err := f.WriteAt(zero, int64(l.Parts[n-1].FirstLBA)*l.SectorSize); err != nil {
+			return err
+		}
+	}
+	return l.writeTables(f, false)
+}
+
+func (l *Layout) writeTables(f *os.File, protectiveMBR bool) error {
+	ss := l.SectorSize
+	if len(l.Parts) > numEntries {
+		return fmt.Errorf("more than %d partitions", numEntries)
+	}
 	entries := make([]byte, numEntries*entrySize)
 	for i, p := range l.Parts {
 		e := entries[i*entrySize:]
@@ -214,11 +234,16 @@ func (l *Layout) Write(f *os.File) error {
 		lba  uint64
 		data []byte
 	}{
-		{0, mbr},
 		{2, entries},
 		{1, header(1, last, 2)},
 		{last - entrySectors, entries},
 		{last, header(last, 1, last-entrySectors)},
+	}
+	if protectiveMBR {
+		writes = append(writes, struct {
+			lba  uint64
+			data []byte
+		}{0, mbr})
 	}
 	for _, w := range writes {
 		if _, err := f.WriteAt(w.data, int64(w.lba)*ss); err != nil {

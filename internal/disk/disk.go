@@ -32,8 +32,11 @@ type Disk struct {
 	// Live is true for the disk Zainium is running from; it can never be a target.
 	Live bool `json:"live"`
 	// Mounted lists the disk's partitions that are currently mounted.
-	Mounted    []string `json:"mounted,omitempty"`
-	Partitions []Part   `json:"partitions,omitempty"`
+	Mounted []string `json:"mounted,omitempty"`
+	// Free is the largest free gap between the partitions of a GPT disk, in bytes: the
+	// space Zainium can use next to the disk's other systems. 0 for other disks.
+	Free       int64  `json:"free,omitempty"`
+	Partitions []Part `json:"partitions,omitempty"`
 }
 
 type Part struct {
@@ -160,11 +163,15 @@ func List() ([]Disk, error) {
 			d.Vendor = ""
 		}
 		parts, _ := filepath.Glob(sys + "/" + name + "*")
+		var spans [][2]int64
+		gpt := false
 		for _, p := range parts {
 			pn := filepath.Base(p)
 			if _, err := os.Stat(p + "/partition"); err != nil {
 				continue
 			}
+			spans = append(spans, [2]int64{sysInt(p + "/start"), sysInt(p + "/size")})
+			gpt = gpt || len(uevent(p, "PARTUUID")) == 36
 			d.Partitions = append(d.Partitions, Part{
 				Name:  pn,
 				Size:  sysInt(p+"/size") * 512,
@@ -176,6 +183,9 @@ func List() ([]Disk, error) {
 		}
 		if mounts[d.Path] != "" {
 			d.Mounted = append(d.Mounted, d.Path)
+		}
+		if gpt {
+			d.Free = largestGap(spans, size/512)
 		}
 		out = append(out, d)
 	}
@@ -341,4 +351,26 @@ func WaitFor(path string, timeout time.Duration) error {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
+}
+
+// largestGap is the biggest 1 MiB-aligned free span, in bytes, between partitions given as
+// (start, size) in 512-byte sectors, keeping the first and last MiB for the GPT.
+func largestGap(spans [][2]int64, sectors int64) int64 {
+	const align = 2048
+	sort.Slice(spans, func(i, j int) bool { return spans[i][0] < spans[j][0] })
+	var best int64
+	next := int64(align)
+	gap := func(from, to int64) {
+		from = (from + align - 1) / align * align
+		to = to / align * align
+		if to-from > best {
+			best = to - from
+		}
+	}
+	for _, s := range spans {
+		gap(next, s[0])
+		next = max(next, s[0]+s[1])
+	}
+	gap(next, sectors-align)
+	return best * 512
 }

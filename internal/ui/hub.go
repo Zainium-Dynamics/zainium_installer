@@ -42,6 +42,9 @@ func (a *App) newTiles() []*tile {
 				return "No disk selected", false
 			}
 			d := a.disks[a.diskSel]
+			if a.alongside.Value && a.canAlongside(d) {
+				return fmt.Sprintf("Next to the other systems on %s, %s free", d.Title(), disk.HumanSize(d.Free)), true
+			}
 			if !a.erase.Value {
 				return "Confirm erasing " + d.Title(), false
 			}
