@@ -124,7 +124,7 @@ func (e *Engine) check() error {
 		return fmt.Errorf("the live image at %s has no kernel to boot: %w", e.Source, err)
 	}
 	e.srcBytes = 0
-	for _, dir := range append(overlayerDirs(e.Source), "root", "home/"+target.LiveUser) {
+	for _, dir := range append(overlayerDirs(e.Source), "root", "home/"+target.LiveUser, preinstalledFlatpaks) {
 		n, _, err := copytree.Measure(filepath.Join(e.Source, dir), nil)
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
@@ -321,6 +321,10 @@ func baseOwner(uid, gid uint32) (uint32, uint32) {
 	return uid, gid
 }
 
+// preinstalledFlatpaks holds the apps that come with the image, Firefox and its runtime. They are
+// the only part of zexlib that is copied: the system flatpak installation, which updates them later.
+const preinstalledFlatpaks = "overlayer/zexlib/union/var/lib/flatpak"
+
 // overlayerDirs lists the live image's overlayer directories (syshub, zaisys, agents, ...); zexlib starts empty.
 func overlayerDirs(src string) []string {
 	dirs := []string{"overlayer/syshub", "overlayer/zaisys"}
@@ -361,7 +365,7 @@ func (e *Engine) copy() error {
 			e.R.Percent(min(pct, 86), fmt.Sprintf("Copying Zainium OS (%s of %s)", disk.HumanSize(base+n), disk.HumanSize(e.srcBytes)))
 		}
 	}
-	for _, dir := range append(overlayerDirs(e.Source), "root") {
+	for _, dir := range append(overlayerDirs(e.Source), "root", preinstalledFlatpaks) {
 		src := filepath.Join(e.Source, dir)
 		if _, err := os.Stat(src); err != nil {
 			continue
