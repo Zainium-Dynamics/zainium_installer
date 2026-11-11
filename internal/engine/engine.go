@@ -372,6 +372,10 @@ func (e *Engine) copy() error {
 		}
 		n, _, _ := copytree.Measure(src, nil)
 		e.logf("copying %s", dir)
+		// the preinstalled flatpaks sit deep inside zexlib, whose parents do not exist yet
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(t, dir)), 0o755); err != nil {
+			return err
+		}
 		if err := copytree.Copy(src, filepath.Join(t, dir), copytree.Options{Owner: baseOwner, Copied: report(done)}); err != nil {
 			return err
 		}
