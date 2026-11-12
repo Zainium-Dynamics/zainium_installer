@@ -38,6 +38,9 @@ type Plan struct {
 	// with its own small boot partition, and Limine's menu offers the other systems too.
 	// UEFI only; the disk must have a GPT.
 	Alongside bool `json:"alongside,omitempty"`
+	// Encrypt, when set, is the passphrase the root partition is encrypted with (LUKS2).
+	// It is asked for at every start, before the system boots.
+	Encrypt string `json:"encrypt,omitempty"`
 }
 
 var (
@@ -89,6 +92,24 @@ func PasswordProblem(p string) string {
 	return ""
 }
 
+// MinEncrypt is the shortest disk encryption passphrase accepted.
+const MinEncrypt = 8
+
+// EncryptProblem is empty for an acceptable disk encryption passphrase, else a short reason.
+// It is typed in the boot splash before any keyboard layout is loaded, so only printable
+// ASCII is allowed: other characters may not be typeable there.
+func EncryptProblem(p string) string {
+	if len(p) < MinEncrypt {
+		return fmt.Sprintf("use at least %d characters", MinEncrypt)
+	}
+	for _, r := range p {
+		if r < ' ' || r > '~' {
+			return "use letters, digits, spaces and the symbols on a US keyboard only"
+		}
+	}
+	return ""
+}
+
 // PasswordProblemFor also rejects a password containing the user name or a part of the full name.
 func PasswordProblemFor(p, user, fullName string) string {
 	if why := PasswordProblem(p); why != "" {
@@ -135,6 +156,11 @@ func (p *Plan) Validate() error {
 	}
 	if strings.ContainsAny(p.User.FullName, ":\n") {
 		errs = append(errs, "full name: no ':' or line breaks")
+	}
+	if p.Encrypt != "" {
+		if why := EncryptProblem(p.Encrypt); why != "" {
+			errs = append(errs, "disk encryption: "+why)
+		}
 	}
 	if p.RootPassword != "" {
 		if why := PasswordProblemFor(p.RootPassword, p.User.Name, p.User.FullName+" root"); why != "" {

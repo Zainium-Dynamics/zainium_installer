@@ -72,6 +72,9 @@ type App struct {
 	diskSel    int
 	erase      widget.Bool
 	alongside  widget.Bool // keep the disk's other systems, install into its free space
+	encrypt    widget.Bool // encrypt the system partition with a passphrase
+	encPw      widget.Editor
+	encPw2     widget.Editor
 	rescan     widget.Clickable
 
 	kbTest     widget.Editor
@@ -177,7 +180,7 @@ func newApp(w *app.Window) *App {
 	a.hostname.SingleLine = true
 	a.kbTest.SingleLine = true
 	a.hostname.SetText(defaultHostname)
-	for _, e := range []*widget.Editor{&a.rootPw, &a.rootPw2, &a.userPw, &a.userPw2} {
+	for _, e := range []*widget.Editor{&a.rootPw, &a.rootPw2, &a.userPw, &a.userPw2, &a.encPw, &a.encPw2} {
 		e.SingleLine = true
 		e.Mask = '•'
 	}
@@ -261,6 +264,9 @@ func (a *App) Plan() plan.Plan {
 		p.Disk = a.disks[a.diskSel].Path
 		p.Alongside = a.alongside.Value && a.canAlongside(a.disks[a.diskSel])
 	}
+	if a.encrypt.Value {
+		p.Encrypt = a.encPw.Text()
+	}
 	if a.rootMode.Value == "enabled" {
 		p.RootPassword = a.rootPw.Text()
 	}
@@ -315,7 +321,7 @@ func isUEFI() bool {
 
 // state summarises everything the screens show, to notice changes made during a frame.
 func (a *App) state() string {
-	return fmt.Sprintf("%d|%+v|%v|%v|%s", a.page, a.Plan(), a.erase.Value, a.alongside.Value, a.rootMode.Value)
+	return fmt.Sprintf("%d|%+v|%v|%v|%v|%s", a.page, a.Plan(), a.erase.Value, a.alongside.Value, a.encrypt.Value, a.rootMode.Value)
 }
 
 func (a *App) layout(gtx layout.Context) {
@@ -464,4 +470,18 @@ const minAlongside = 20 << 30
 // with partitions and enough free space, on a computer started in UEFI mode.
 func (a *App) canAlongside(d disk.Disk) bool {
 	return isUEFI() && len(d.Partitions) > 0 && d.Free >= minAlongside
+}
+
+// encryptProblem is empty when encryption is off or its passphrase is fine and confirmed.
+func (a *App) encryptProblem() string {
+	if !a.encrypt.Value {
+		return ""
+	}
+	if why := plan.EncryptProblem(a.encPw.Text()); why != "" {
+		return "Encryption passphrase: " + why
+	}
+	if a.encPw.Text() != a.encPw2.Text() {
+		return "The encryption passphrases do not match"
+	}
+	return ""
 }
