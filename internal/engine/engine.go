@@ -44,6 +44,9 @@ type Engine struct {
 	mounts   []string // unmounted in reverse on exit
 	disk     disk.Disk
 	layout   *disk.Layout
+	espNum   int // partition numbers of the ESP (Zainium's own boot partition next to
+	rootNum  int // another system) and the root
+	fresh    []int
 	espDev   string
 	rootDev  string
 	rootUUID string
@@ -132,7 +135,20 @@ func (e *Engine) check() error {
 		e.srcBytes += n
 	}
 	need := int64(espSize) + 2<<20 + e.srcBytes + headroom
-	if e.disk.Size < need {
+	if e.Plan.Alongside {
+		need = alongsideBoot + e.srcBytes + headroom
+		if !boot.UEFI() && !e.DryRun {
+			return errors.New("installing next to another system needs a computer started in UEFI mode")
+		}
+		free, err := e.freeSpace()
+		if err != nil {
+			return err
+		}
+		if free < need {
+			return fmt.Errorf("not enough free space on %s: %s free, %s needed. Make room first, for example by shrinking a partition in Windows Disk Management",
+				e.disk.Title(), disk.HumanSize(free), disk.HumanSize(need))
+		}
+	} else if e.disk.Size < need {
 		return fmt.Errorf("%s is too small: %s needed", e.disk.Title(), disk.HumanSize(need))
 	}
 	e.logf("source: %s (%s to copy)", e.Source, disk.HumanSize(e.srcBytes))
@@ -174,10 +190,63 @@ func (e *Engine) findSource() (string, error) {
 	return src, nil
 }
 
+// alongsideBoot is Zainium's own FAT boot partition next to another system: Limine and the
+// kernels, which do not fit on the other system's EFI partition (Windows makes 100 MB).
+const alongsideBoot = 512 << 20
+
+// freeSpace is the largest free gap on the target disk, in bytes.
+func (e *Engine) freeSpace() (int64, error) {
+	f, err := os.Open(e.Plan.Disk)
+	if err != nil {
+		return 0, err
+	}
+	defer f.Close()
+	ss, n, err := disk.Geometry(f)
+	if err != nil {
+		return 0, err
+	}
+	l, err := disk.ReadLayout(f, ss, n)
+	if err != nil {
+		return 0, fmt.Errorf("%s: %w", e.disk.Title(), err)
+	}
+	first, last := l.LargestFree()
+	if last <= first {
+		return 0, nil
+	}
+	return int64(last-first+1) * ss, nil
+}
+
+// partitionAlongside adds Zainium's boot and root partitions in the largest free gap,
+// leaving every other partition and the MBR untouched.
+func (e *Engine) partitionAlongside(f *os.File, ss int64, n uint64) error {
+	l, err := disk.ReadLayout(f, ss, n)
+	if err != nil {
+		return err
+	}
+	first, last := l.LargestFree()
+	bootLast := first + uint64(alongsideBoot/ss) - 1
+	if last <= first || bootLast >= last {
+		return errors.New("no free space left on the disk")
+	}
+	e.espNum = l.AddPart(disk.Partition{Type: disk.TypeESP, GUID: disk.RandomGUID(), Name: "Zainium boot", FirstLBA: first, LastLBA: bootLast})
+	e.rootNum = l.AddPart(disk.Partition{Type: disk.TypeLinuxRoot, GUID: disk.RandomGUID(), Name: "Zainium OS", FirstLBA: bootLast + 1, LastLBA: last})
+	e.fresh = []int{e.espNum, e.rootNum}
+	e.layout = l
+	for _, num := range e.fresh {
+		p := l.Parts[num-1]
+		e.logf("partition %d: %s, %s (other partitions kept)", num, p.Name, disk.HumanSize(p.Size(ss)))
+	}
+	if err := l.Update(f, e.fresh); err != nil {
+		return fmt.Errorf("writing partition table: %w", err)
+	}
+	return nil
+}
+
 func (e *Engine) partition() error {
 	if err := e.release(); err != nil {
 		return err
 	}
+	e.espNum, e.rootNum = disk.PartESP, disk.PartRoot
 	// O_EXCL on a block device fails while any partition is mounted
 	f, err := os.OpenFile(e.Plan.Disk, os.O_RDWR|unix.O_EXCL, 0)
 	if err != nil {
@@ -188,20 +257,26 @@ func (e *Engine) partition() error {
 	if err != nil {
 		return err
 	}
-	if e.layout, err = disk.PlanLayout(ss, n, espSize); err != nil {
-		return err
-	}
-	for i, p := range e.layout.Parts {
-		e.logf("partition %d: %s, %s", i+1, p.Name, disk.HumanSize(p.Size(ss)))
-	}
-	if err := e.layout.Write(f); err != nil {
-		return fmt.Errorf("writing partition table: %w", err)
+	if e.Plan.Alongside {
+		if err := e.partitionAlongside(f, ss, n); err != nil {
+			return err
+		}
+	} else {
+		if e.layout, err = disk.PlanLayout(ss, n, espSize); err != nil {
+			return err
+		}
+		for i, p := range e.layout.Parts {
+			e.logf("partition %d: %s, %s", i+1, p.Name, disk.HumanSize(p.Size(ss)))
+		}
+		if err := e.layout.Write(f); err != nil {
+			return fmt.Errorf("writing partition table: %w", err)
+		}
 	}
 	if err := disk.Reread(f); err != nil {
 		return err
 	}
-	e.espDev = disk.PartitionPath(e.Plan.Disk, disk.PartESP)
-	e.rootDev = disk.PartitionPath(e.Plan.Disk, disk.PartRoot)
+	e.espDev = disk.PartitionPath(e.Plan.Disk, e.espNum)
+	e.rootDev = disk.PartitionPath(e.Plan.Disk, e.rootNum)
 	exec.Command("udevadm", "settle", "--timeout=10").Run()
 	for _, d := range []string{e.espDev, e.rootDev} {
 		if err := disk.WaitFor(d, 15*time.Second); err != nil {
@@ -251,7 +326,7 @@ func (e *Engine) refreshDisk() (disk.Disk, error) {
 }
 
 func (e *Engine) format() error {
-	esp := e.layout.Parts[disk.PartESP-1]
+	esp := e.layout.Parts[e.espNum-1]
 	f, err := os.OpenFile(e.espDev, os.O_RDWR|unix.O_EXCL, 0)
 	if err != nil {
 		return err
@@ -428,10 +503,14 @@ func copyOverlayerFiles(src, dst string) error {
 
 func (e *Engine) boot() error {
 	zaisys := filepath.Join(e.root(), "overlayer/zaisys")
-	if err := boot.InstallESP(zaisys, e.esp(), e.rootUUID, rootFS, func(s string) { e.R.Logf(s) }); err != nil {
+	if err := boot.InstallESP(zaisys, e.esp(), e.rootUUID, rootFS, !e.Plan.Alongside, func(s string) { e.R.Logf(s) }); err != nil {
 		return err
 	}
-	if out, err := boot.BIOSInstall(e.Plan.Disk, disk.PartBIOSBoot); err != nil {
+	if e.Plan.Alongside {
+		if err := e.addOtherSystems(); err != nil {
+			return err
+		}
+	} else if out, err := boot.BIOSInstall(e.Plan.Disk, disk.PartBIOSBoot); err != nil {
 		if e.Plan.BIOS || !boot.UEFI() {
 			return fmt.Errorf("limine bios-install: %v: %s", err, out)
 		}
@@ -440,7 +519,7 @@ func (e *Engine) boot() error {
 		e.logf("BIOS boot code installed")
 	}
 	if boot.UEFI() {
-		name, err := boot.AddBootEntry("Zainium OS", disk.PartESP, e.layout.Parts[disk.PartESP-1], "/EFI/BOOT/BOOTX64.EFI")
+		name, err := boot.AddBootEntry("Zainium OS", uint32(e.espNum), e.layout.Parts[e.espNum-1], "/EFI/BOOT/BOOTX64.EFI")
 		if err != nil {
 			// the firmware still finds the removable-media path EFI/BOOT/BOOTX64.EFI
 			e.logf("UEFI boot entry not added: %v", err)
@@ -449,6 +528,44 @@ func (e *Engine) boot() error {
 		}
 	}
 	return nil
+}
+
+// addOtherSystems looks for Windows and other Linux systems on the disk's other EFI partitions
+// and adds them to Limine's menu, so the computer can still start them.
+func (e *Engine) addOtherSystems() error {
+	var others []boot.OtherSystem
+	for i, p := range e.layout.Parts {
+		num := i + 1
+		if p.Type != disk.TypeESP || num == e.espNum {
+			continue
+		}
+		dev := disk.PartitionPath(e.Plan.Disk, num)
+		dir := filepath.Join(workDir, fmt.Sprintf("other-esp%d", num))
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			return err
+		}
+		if err := unix.Mount(dev, dir, "vfat", unix.MS_RDONLY, ""); err != nil {
+			e.logf("%s: not read (%v)", dev, err)
+			continue
+		}
+		found := boot.FindOtherSystems(dir, p.GUID.String())
+		unix.Unmount(dir, 0)
+		os.Remove(dir)
+		for _, o := range found {
+			e.logf("found %s on %s (%s)", o.Name, dev, o.Path)
+		}
+		others = append(others, found...)
+	}
+	if len(others) == 0 {
+		e.logf("no other system found to add to the boot menu")
+		return nil
+	}
+	conf := filepath.Join(e.esp(), "limine.conf")
+	data, err := os.ReadFile(conf)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(conf, boot.WithOtherSystems(data, others), 0o644)
 }
 
 func (e *Engine) configure() error {

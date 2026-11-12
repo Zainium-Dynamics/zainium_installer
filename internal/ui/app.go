@@ -71,6 +71,7 @@ type App struct {
 	diskClicks []widget.Clickable
 	diskSel    int
 	erase      widget.Bool
+	alongside  widget.Bool // keep the disk's other systems, install into its free space
 	rescan     widget.Clickable
 
 	kbTest     widget.Editor
@@ -206,6 +207,7 @@ func (a *App) scanDisks() {
 	a.diskClicks = make([]widget.Clickable, len(ds))
 	a.diskSel = -1
 	a.erase.Value = false
+	a.alongside.Value = false
 	var usable []int
 	for i, d := range ds {
 		if ok, _ := d.Usable(); ok {
@@ -257,6 +259,7 @@ func (a *App) Plan() plan.Plan {
 	}
 	if a.diskSel >= 0 {
 		p.Disk = a.disks[a.diskSel].Path
+		p.Alongside = a.alongside.Value && a.canAlongside(a.disks[a.diskSel])
 	}
 	if a.rootMode.Value == "enabled" {
 		p.RootPassword = a.rootPw.Text()
@@ -312,7 +315,7 @@ func isUEFI() bool {
 
 // state summarises everything the screens show, to notice changes made during a frame.
 func (a *App) state() string {
-	return fmt.Sprintf("%d|%+v|%v|%s", a.page, a.Plan(), a.erase.Value, a.rootMode.Value)
+	return fmt.Sprintf("%d|%+v|%v|%v|%s", a.page, a.Plan(), a.erase.Value, a.alongside.Value, a.rootMode.Value)
 }
 
 func (a *App) layout(gtx layout.Context) {
@@ -451,4 +454,14 @@ func zoneTime(name string) string {
 		return ""
 	}
 	return time.Now().In(loc).Format("Monday 2 January 2006, 15:04")
+}
+
+// minAlongside is the free space the installer asks for next to another system: Zainium's
+// boot partition, the system and room for updates and apps.
+const minAlongside = 20 << 30
+
+// canAlongside says whether Zainium OS can go next to the systems already on d: a GPT disk
+// with partitions and enough free space, on a computer started in UEFI mode.
+func (a *App) canAlongside(d disk.Disk) bool {
+	return isUEFI() && len(d.Partitions) > 0 && d.Free >= minAlongside
 }

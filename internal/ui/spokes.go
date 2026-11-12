@@ -192,18 +192,24 @@ func (a *App) diskSpoke(gtx layout.Context) layout.Dimensions {
 			if ok, _ := a.disks[i].Usable(); ok && a.diskSel != i {
 				a.diskSel = i
 				a.erase.Value = false
+				a.alongside.Value = false
 			}
 		}
 	}
 	if a.rescan.Clicked(gtx) {
 		a.scanDisks()
 	}
-	a.erase.Update(gtx)
+	if a.erase.Update(gtx) && a.erase.Value {
+		a.alongside.Value = false
+	}
+	if a.alongside.Update(gtx) && a.alongside.Value {
+		a.erase.Value = false
+	}
 
 	children := []layout.FlexChild{
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return a.intro(gtx, "Where should Zainium OS be installed?",
-				"Select a disk. Zainium OS uses the whole disk: an EFI partition and one system partition are created.")
+				"Select a disk. Zainium OS can use the whole disk, or the free space next to Windows or another Linux on it.")
 		}),
 	}
 	if len(a.disks) == 0 {
@@ -221,7 +227,29 @@ func (a *App) diskSpoke(gtx layout.Context) layout.Dimensions {
 			})
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			if a.diskSel < 0 {
+			if a.diskSel < 0 || !a.canAlongside(a.disks[a.diskSel]) {
+				return layout.Dimensions{}
+			}
+			d := a.disks[a.diskSel]
+			return layout.Inset{Bottom: 12}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return border(gtx, colAccent, 10, func(gtx layout.Context) layout.Dimensions {
+					gtx.Constraints.Min.X = gtx.Constraints.Max.X
+					return layout.UniformInset(16).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+						return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+							layout.Rigid(label(a.th, 15, "Install next to the other systems", colText, font.SemiBold).Layout),
+							vspace(6),
+							layout.Rigid(label(a.th, 13, fmt.Sprintf("Zainium OS goes into the %s of free space. Your other partitions are not changed, and a menu at start-up lets you choose a system.", disk.HumanSize(d.Free)), colDim, font.Normal).Layout),
+							vspace(10),
+							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+								return checkbox(a.th, gtx, &a.alongside, "Keep the other systems and use the free space")
+							}),
+						)
+					})
+				})
+			})
+		}),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			if a.diskSel < 0 || a.alongside.Value {
 				return layout.Dimensions{}
 			}
 			d := a.disks[a.diskSel]

@@ -58,7 +58,9 @@ func Config(template []byte, rootUUID, fstype, kernel string) ([]byte, error) {
 }
 
 // InstallESP copies Limine and the kernels from zaisys to the mounted ESP and writes limine.conf.
-func InstallESP(zaisys, esp, rootUUID, fstype string, log func(string)) error {
+// bios false leaves out limine-bios.sys: next to another system the BIOS boot code is not
+// written, and without that file zex's kernel upgrades do not write it either.
+func InstallESP(zaisys, esp, rootUUID, fstype string, bios bool, log func(string)) error {
 	kernel, err := Kernel(zaisys)
 	if err != nil {
 		return err
@@ -79,8 +81,8 @@ func InstallESP(zaisys, esp, rootUUID, fstype string, log func(string)) error {
 	for src, dst := range files {
 		from, to := filepath.Join(zaisys, src), filepath.Join(esp, dst)
 		if src == "limine/limine-bios.sys" {
-			if _, err := os.Stat(from); os.IsNotExist(err) {
-				continue // UEFI-only builds
+			if _, err := os.Stat(from); os.IsNotExist(err) || !bios {
+				continue // UEFI-only builds, or next to another system
 			}
 		}
 		if err := copyFile(from, to); err != nil {

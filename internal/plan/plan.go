@@ -34,6 +34,10 @@ type Plan struct {
 	RootPassword string `json:"root_password,omitempty"`
 	// BIOS also installs Limine's legacy BIOS stage (UEFI is always installed).
 	BIOS bool `json:"bios"`
+	// Alongside keeps the disk's other systems: Zainium goes into the largest free space,
+	// with its own small boot partition, and Limine's menu offers the other systems too.
+	// UEFI only; the disk must have a GPT.
+	Alongside bool `json:"alongside,omitempty"`
 }
 
 var (
