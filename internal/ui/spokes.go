@@ -205,6 +205,7 @@ func (a *App) diskSpoke(gtx layout.Context) layout.Dimensions {
 	if a.alongside.Update(gtx) && a.alongside.Value {
 		a.erase.Value = false
 	}
+	a.encrypt.Update(gtx)
 
 	children := []layout.FlexChild{
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -275,8 +276,58 @@ func (a *App) diskSpoke(gtx layout.Context) layout.Dimensions {
 			})
 		}),
 	)
+	children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+		if a.diskSel < 0 {
+			return layout.Dimensions{}
+		}
+		return layout.Inset{Top: 12}.Layout(gtx, a.encryptCard)
+	}))
 	return a.spokeList.Layout(gtx, len(children), func(gtx layout.Context, i int) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children[i])
+	})
+}
+
+// encryptCard offers LUKS2 encryption of the system partition, with its passphrase.
+func (a *App) encryptCard(gtx layout.Context) layout.Dimensions {
+	return border(gtx, colAccent, 10, func(gtx layout.Context) layout.Dimensions {
+		gtx.Constraints.Min.X = gtx.Constraints.Max.X
+		return layout.UniformInset(16).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			rows := []layout.FlexChild{
+				layout.Rigid(label(a.th, 15, "Encrypt the system", colText, font.SemiBold).Layout),
+				vspace(6),
+				layout.Rigid(label(a.th, 13, "Your files can not be read without the passphrase, which is asked for at every start. If you forget it, the data can not be recovered.", colDim, font.Normal).Layout),
+				vspace(10),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return checkbox(a.th, gtx, &a.encrypt, "Encrypt Zainium OS with a passphrase")
+				}),
+			}
+			if a.encrypt.Value {
+				pw := a.encPw.Text()
+				msg, col := fmt.Sprintf("At least %d characters; letters, digits and US keyboard symbols", plan.MinEncrypt), colDim
+				if pw != "" {
+					if why := plan.EncryptProblem(pw); why != "" {
+						msg, col = "Passphrase: "+why, colError
+					} else {
+						msg = ""
+					}
+				}
+				confirm := ""
+				if a.encPw2.Text() != "" && pw != a.encPw2.Text() {
+					confirm = "The passphrases do not match"
+				}
+				rows = append(rows,
+					vspace(12),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+						return editorBox(a.th, gtx, &a.encPw, "Encryption passphrase", "", msg, col)
+					}),
+					vspace(10),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+						return editorBox(a.th, gtx, &a.encPw2, "Confirm passphrase", "", confirm, colError)
+					}),
+				)
+			}
+			return layout.Flex{Axis: layout.Vertical}.Layout(gtx, rows...)
+		})
 	})
 }
 

@@ -47,9 +47,11 @@ type Engine struct {
 	espNum   int // partition numbers of the ESP (Zainium's own boot partition next to
 	rootNum  int // another system) and the root
 	fresh    []int
+	opened   bool // the encrypted root is open as /dev/mapper/zainium-root
 	espDev   string
 	rootDev  string
 	rootUUID string
+	luksUUID string // the LUKS2 header's UUID when the root is encrypted: what boot finds
 	srcBytes int64
 }
 
@@ -347,6 +349,11 @@ func (e *Engine) format() error {
 	e.logf("%s: FAT32 %s", e.espDev, espLabel)
 	e.R.Percent(6, "")
 
+	if e.Plan.Encrypt != "" {
+		if err := e.encrypt(); err != nil {
+			return err
+		}
+	}
 	e.rootUUID = newUUID()
 	// verity: quantra-ramfs turns on fs-verity for every base file, so its content cannot be rewritten
 	out, err := exec.Command("mkfs.ext4", "-F", "-q", "-O", "verity", "-L", RootLabel, "-U", e.rootUUID, e.rootDev).CombinedOutput()
@@ -354,6 +361,41 @@ func (e *Engine) format() error {
 		return fmt.Errorf("mkfs.ext4 %s: %v: %s", e.rootDev, err, strings.TrimSpace(string(out)))
 	}
 	e.logf("%s: ext4 %s UUID=%s", e.rootDev, RootLabel, e.rootUUID)
+	return nil
+}
+
+// luksName is the mapping of an encrypted root: /dev/mapper/zainium-root, here and at boot
+// (luks= on the kernel command line).
+const luksName = "zainium-root"
+
+func cryptsetup(args []string, key string) error {
+	bin, err := exec.LookPath("cryptsetup")
+	if err != nil {
+		bin = "/overlayer/syshub/bin/cryptsetup"
+	}
+	cmd := exec.Command(bin, args...)
+	cmd.Stdin = strings.NewReader(key)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("cryptsetup %s: %v: %s", args[0], err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+// encrypt turns the root partition into LUKS2 and opens it; the file system then goes on
+// the opened mapping. The passphrase is passed on stdin, never on a command line.
+func (e *Engine) encrypt() error {
+	e.R.Percent(6, "Encrypting the system partition")
+	e.luksUUID = newUUID()
+	if err := cryptsetup([]string{"luksFormat", "--type", "luks2", "--batch-mode", "--uuid", e.luksUUID,
+		"--label", RootLabel, "--key-file=-", e.rootDev}, e.Plan.Encrypt); err != nil {
+		return err
+	}
+	if err := cryptsetup([]string{"open", "--key-file=-", e.rootDev, luksName}, e.Plan.Encrypt); err != nil {
+		return err
+	}
+	e.opened = true
+	e.logf("%s: LUKS2 UUID=%s, opened as /dev/mapper/%s", e.rootDev, e.luksUUID, luksName)
+	e.rootDev = "/dev/mapper/" + luksName
 	return nil
 }
 
@@ -503,8 +545,23 @@ func copyOverlayerFiles(src, dst string) error {
 
 func (e *Engine) boot() error {
 	zaisys := filepath.Join(e.root(), "overlayer/zaisys")
-	if err := boot.InstallESP(zaisys, e.esp(), e.rootUUID, rootFS, !e.Plan.Alongside, func(s string) { e.R.Logf(s) }); err != nil {
+	bootUUID := e.rootUUID
+	if e.luksUUID != "" {
+		bootUUID = e.luksUUID // quantra-ramfs finds the LUKS header, opens it and mounts the inside
+	}
+	if err := boot.InstallESP(zaisys, e.esp(), bootUUID, rootFS, !e.Plan.Alongside, func(s string) { e.R.Logf(s) }); err != nil {
 		return err
+	}
+	if e.luksUUID != "" {
+		conf := filepath.Join(e.esp(), "limine.conf")
+		data, err := os.ReadFile(conf)
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(conf, []byte(strings.ReplaceAll(string(data), " rootfstype=", " luks="+luksName+" rootfstype=")), 0o644); err != nil {
+			return err
+		}
+		e.logf("ESP: limine.conf unlocks the root (luks=%s)", luksName)
 	}
 	if e.Plan.Alongside {
 		if err := e.addOtherSystems(); err != nil {
@@ -640,5 +697,11 @@ func (e *Engine) cleanup() error {
 		os.Remove(m)
 	}
 	e.mounts = nil
+	if e.opened {
+		if err := cryptsetup([]string{"close", luksName}, ""); err != nil && first == nil {
+			first = err
+		}
+		e.opened = false
+	}
 	return first
 }
