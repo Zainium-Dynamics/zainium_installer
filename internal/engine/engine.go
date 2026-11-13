@@ -5,10 +5,14 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 	"unsafe"
 
@@ -47,9 +51,11 @@ type Engine struct {
 	espNum   int // partition numbers of the ESP (Zainium's own boot partition next to
 	rootNum  int // another system) and the root
 	fresh    []int
+	opened   bool // the encrypted root is open as /dev/mapper/zainium-root
 	espDev   string
 	rootDev  string
 	rootUUID string
+	luksUUID string // the LUKS2 header's UUID when the root is encrypted: what boot finds
 	srcBytes int64
 }
 
@@ -74,7 +80,8 @@ func (e *Engine) Run() (err error) {
 		{progress.Copy, 10, e.copy},
 		{progress.Boot, 86, e.boot},
 		{progress.Configure, 91, e.configure},
-		{progress.Finish, 97, e.finish},
+		{progress.Secure, 95, e.secure},
+		{progress.Finish, 99, e.finish},
 	}
 	for _, s := range steps {
 		e.R.Step(s.name, s.percent, progress.Titles[s.name])
@@ -347,6 +354,11 @@ func (e *Engine) format() error {
 	e.logf("%s: FAT32 %s", e.espDev, espLabel)
 	e.R.Percent(6, "")
 
+	if e.Plan.Encrypt != "" {
+		if err := e.encrypt(); err != nil {
+			return err
+		}
+	}
 	e.rootUUID = newUUID()
 	// verity: quantra-ramfs turns on fs-verity for every base file, so its content cannot be rewritten
 	out, err := exec.Command("mkfs.ext4", "-F", "-q", "-O", "verity", "-L", RootLabel, "-U", e.rootUUID, e.rootDev).CombinedOutput()
@@ -354,6 +366,41 @@ func (e *Engine) format() error {
 		return fmt.Errorf("mkfs.ext4 %s: %v: %s", e.rootDev, err, strings.TrimSpace(string(out)))
 	}
 	e.logf("%s: ext4 %s UUID=%s", e.rootDev, RootLabel, e.rootUUID)
+	return nil
+}
+
+// luksName is the mapping of an encrypted root: /dev/mapper/zainium-root, here and at boot
+// (luks= on the kernel command line).
+const luksName = "zainium-root"
+
+func cryptsetup(args []string, key string) error {
+	bin, err := exec.LookPath("cryptsetup")
+	if err != nil {
+		bin = "/overlayer/syshub/bin/cryptsetup"
+	}
+	cmd := exec.Command(bin, args...)
+	cmd.Stdin = strings.NewReader(key)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("cryptsetup %s: %v: %s", args[0], err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+// encrypt turns the root partition into LUKS2 and opens it; the file system then goes on
+// the opened mapping. The passphrase is passed on stdin, never on a command line.
+func (e *Engine) encrypt() error {
+	e.R.Percent(6, "Encrypting the system partition")
+	e.luksUUID = newUUID()
+	if err := cryptsetup([]string{"luksFormat", "--type", "luks2", "--batch-mode", "--uuid", e.luksUUID,
+		"--label", RootLabel, "--key-file=-", e.rootDev}, e.Plan.Encrypt); err != nil {
+		return err
+	}
+	if err := cryptsetup([]string{"open", "--key-file=-", e.rootDev, luksName}, e.Plan.Encrypt); err != nil {
+		return err
+	}
+	e.opened = true
+	e.logf("%s: LUKS2 UUID=%s, opened as /dev/mapper/%s", e.rootDev, e.luksUUID, luksName)
+	e.rootDev = "/dev/mapper/" + luksName
 	return nil
 }
 
@@ -503,8 +550,23 @@ func copyOverlayerFiles(src, dst string) error {
 
 func (e *Engine) boot() error {
 	zaisys := filepath.Join(e.root(), "overlayer/zaisys")
-	if err := boot.InstallESP(zaisys, e.esp(), e.rootUUID, rootFS, !e.Plan.Alongside, func(s string) { e.R.Logf(s) }); err != nil {
+	bootUUID := e.rootUUID
+	if e.luksUUID != "" {
+		bootUUID = e.luksUUID // quantra-ramfs finds the LUKS header, opens it and mounts the inside
+	}
+	if err := boot.InstallESP(zaisys, e.esp(), bootUUID, rootFS, !e.Plan.Alongside, func(s string) { e.R.Logf(s) }); err != nil {
 		return err
+	}
+	if e.luksUUID != "" {
+		conf := filepath.Join(e.esp(), "limine.conf")
+		data, err := os.ReadFile(conf)
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(conf, []byte(strings.ReplaceAll(string(data), " rootfstype=", " luks="+luksName+" rootfstype=")), 0o644); err != nil {
+			return err
+		}
+		e.logf("ESP: limine.conf unlocks the root (luks=%s)", luksName)
 	}
 	if e.Plan.Alongside {
 		if err := e.addOtherSystems(); err != nil {
@@ -619,6 +681,104 @@ func (e *Engine) configure() error {
 	return nil
 }
 
+// secure seals every base and zaisys file with fs-verity now, while most of them are still
+// in memory from the copy. quantra-ramfs would do it at the first start, reading all of it
+// back from the disk, which on a USB stick takes a very long time. It runs after configure,
+// which still writes the base's etc.
+func (e *Engine) secure() error {
+	var files []string
+	// quantra-ramfs' fingerprint of the two trees (baseverity.rs): directories, files and
+	// the newest ctime of any directory below the tops. With it written, the first start
+	// sees the base as checked already instead of opening every file again.
+	var dirs, newest int64
+	for _, dir := range []string{"overlayer/syshub", "overlayer/zaisys"} {
+		top := filepath.Join(e.root(), dir)
+		filepath.WalkDir(top, func(p string, d fs.DirEntry, err error) error {
+			switch {
+			case err != nil:
+			case d.IsDir():
+				dirs++
+				var st unix.Stat_t
+				if p != top && unix.Lstat(p, &st) == nil {
+					newest = max(newest, st.Ctim.Sec*1_000_000_000+st.Ctim.Nsec)
+				}
+			case d.Type().IsRegular():
+				files = append(files, p)
+			}
+			return nil
+		})
+	}
+	var done, failed atomic.Int64
+	var unsupported atomic.Bool
+	jobs := make(chan string, 256)
+	var wg sync.WaitGroup
+	for range min(runtime.NumCPU(), 16) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for p := range jobs {
+				switch err := enableVerity(p); {
+				case err == nil:
+				case errors.Is(err, unix.EOPNOTSUPP) || errors.Is(err, unix.ENOTTY):
+					unsupported.Store(true)
+				default:
+					failed.Add(1)
+				}
+				done.Add(1)
+			}
+		}()
+	}
+	stop := make(chan struct{})
+	go func() {
+		t := time.NewTicker(500 * time.Millisecond)
+		defer t.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-t.C:
+				n := done.Load()
+				e.R.Percent(95+4*float64(n)/float64(max(len(files), 1)),
+					fmt.Sprintf("Securing the system (%d of %d files)", n, len(files)))
+			}
+		}
+	}()
+	for _, p := range files {
+		jobs <- p
+	}
+	close(jobs)
+	wg.Wait()
+	close(stop)
+	if unsupported.Load() {
+		e.logf("fs-verity is not available on %s; quantra-ramfs seals the base at the first start", e.rootDev)
+		return nil
+	}
+	e.logf("fs-verity: %d files sealed, %d failed (left for the first start)", len(files)-int(failed.Load()), failed.Load())
+	if failed.Load() == 0 {
+		stamp := fmt.Sprintf("%d:%d:%d", dirs, len(files), newest)
+		if err := unix.Setxattr(filepath.Join(e.root(), "overlayer/syshub"), "trusted.zainium.verity", []byte(stamp), 0); err != nil {
+			e.logf("fs-verity stamp not written (%v): the first start checks every file", err)
+		}
+	}
+	return nil
+}
+
+// enableVerity turns fs-verity on for one file, the way quantra-ramfs does: SHA-256, 4 KiB
+// blocks, no salt. A file that has it already is fine.
+func enableVerity(path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	arg := unix.FsverityEnableArg{Version: 1, Hash_algorithm: unix.FS_VERITY_HASH_ALG_SHA256, Block_size: 4096}
+	_, _, e := unix.Syscall(unix.SYS_IOCTL, f.Fd(), unix.FS_IOC_ENABLE_VERITY, uintptr(unsafe.Pointer(&arg)))
+	if e == 0 || e == unix.EEXIST {
+		return nil
+	}
+	return e
+}
+
 func (e *Engine) finish() error {
 	unix.Sync()
 	return e.cleanup()
@@ -640,5 +800,11 @@ func (e *Engine) cleanup() error {
 		os.Remove(m)
 	}
 	e.mounts = nil
+	if e.opened {
+		if err := cryptsetup([]string{"close", luksName}, ""); err != nil && first == nil {
+			first = err
+		}
+		e.opened = false
+	}
 	return first
 }
