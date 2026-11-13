@@ -5,10 +5,14 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 	"unsafe"
 
@@ -76,7 +80,8 @@ func (e *Engine) Run() (err error) {
 		{progress.Copy, 10, e.copy},
 		{progress.Boot, 86, e.boot},
 		{progress.Configure, 91, e.configure},
-		{progress.Finish, 97, e.finish},
+		{progress.Secure, 95, e.secure},
+		{progress.Finish, 99, e.finish},
 	}
 	for _, s := range steps {
 		e.R.Step(s.name, s.percent, progress.Titles[s.name])
@@ -674,6 +679,104 @@ func (e *Engine) configure() error {
 		}
 	}
 	return nil
+}
+
+// secure seals every base and zaisys file with fs-verity now, while most of them are still
+// in memory from the copy. quantra-ramfs would do it at the first start, reading all of it
+// back from the disk, which on a USB stick takes a very long time. It runs after configure,
+// which still writes the base's etc.
+func (e *Engine) secure() error {
+	var files []string
+	// quantra-ramfs' fingerprint of the two trees (baseverity.rs): directories, files and
+	// the newest ctime of any directory below the tops. With it written, the first start
+	// sees the base as checked already instead of opening every file again.
+	var dirs, newest int64
+	for _, dir := range []string{"overlayer/syshub", "overlayer/zaisys"} {
+		top := filepath.Join(e.root(), dir)
+		filepath.WalkDir(top, func(p string, d fs.DirEntry, err error) error {
+			switch {
+			case err != nil:
+			case d.IsDir():
+				dirs++
+				var st unix.Stat_t
+				if p != top && unix.Lstat(p, &st) == nil {
+					newest = max(newest, st.Ctim.Sec*1_000_000_000+st.Ctim.Nsec)
+				}
+			case d.Type().IsRegular():
+				files = append(files, p)
+			}
+			return nil
+		})
+	}
+	var done, failed atomic.Int64
+	var unsupported atomic.Bool
+	jobs := make(chan string, 256)
+	var wg sync.WaitGroup
+	for range min(runtime.NumCPU(), 16) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for p := range jobs {
+				switch err := enableVerity(p); {
+				case err == nil:
+				case errors.Is(err, unix.EOPNOTSUPP) || errors.Is(err, unix.ENOTTY):
+					unsupported.Store(true)
+				default:
+					failed.Add(1)
+				}
+				done.Add(1)
+			}
+		}()
+	}
+	stop := make(chan struct{})
+	go func() {
+		t := time.NewTicker(500 * time.Millisecond)
+		defer t.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-t.C:
+				n := done.Load()
+				e.R.Percent(95+4*float64(n)/float64(max(len(files), 1)),
+					fmt.Sprintf("Securing the system (%d of %d files)", n, len(files)))
+			}
+		}
+	}()
+	for _, p := range files {
+		jobs <- p
+	}
+	close(jobs)
+	wg.Wait()
+	close(stop)
+	if unsupported.Load() {
+		e.logf("fs-verity is not available on %s; quantra-ramfs seals the base at the first start", e.rootDev)
+		return nil
+	}
+	e.logf("fs-verity: %d files sealed, %d failed (left for the first start)", len(files)-int(failed.Load()), failed.Load())
+	if failed.Load() == 0 {
+		stamp := fmt.Sprintf("%d:%d:%d", dirs, len(files), newest)
+		if err := unix.Setxattr(filepath.Join(e.root(), "overlayer/syshub"), "trusted.zainium.verity", []byte(stamp), 0); err != nil {
+			e.logf("fs-verity stamp not written (%v): the first start checks every file", err)
+		}
+	}
+	return nil
+}
+
+// enableVerity turns fs-verity on for one file, the way quantra-ramfs does: SHA-256, 4 KiB
+// blocks, no salt. A file that has it already is fine.
+func enableVerity(path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	arg := unix.FsverityEnableArg{Version: 1, Hash_algorithm: unix.FS_VERITY_HASH_ALG_SHA256, Block_size: 4096}
+	_, _, e := unix.Syscall(unix.SYS_IOCTL, f.Fd(), unix.FS_IOC_ENABLE_VERITY, uintptr(unsafe.Pointer(&arg)))
+	if e == 0 || e == unix.EEXIST {
+		return nil
+	}
+	return e
 }
 
 func (e *Engine) finish() error {
