@@ -503,6 +503,11 @@ func (e *Engine) copy() error {
 		}
 		done += n
 	}
+	// flatpak makes a user installation 0700; the system one must be readable by every user,
+	// or nobody but root sees the preinstalled apps
+	if err := os.Chmod(filepath.Join(t, preinstalledFlatpaks), 0o755); err != nil && !os.IsNotExist(err) {
+		return err
+	}
 	return copyOverlayerFiles(e.Source, t)
 }
 
