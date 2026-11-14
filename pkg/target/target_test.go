@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Zainium-Dynamics/zainium-installer/internal/crypt"
-	"github.com/Zainium-Dynamics/zainium-installer/internal/plan"
+	"github.com/Zainium-Dynamics/zainium-installer/pkg/crypt"
+	"github.com/Zainium-Dynamics/zainium-installer/pkg/plan"
 )
 
 const passwd = `root:x:0:0:root:/root:/overlayer/syshub/bin/bash

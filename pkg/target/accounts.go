@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Zainium-Dynamics/zainium-installer/internal/crypt"
-	"github.com/Zainium-Dynamics/zainium-installer/internal/plan"
+	"github.com/Zainium-Dynamics/zainium-installer/pkg/crypt"
+	"github.com/Zainium-Dynamics/zainium-installer/pkg/plan"
 )
 
 // table is a colon-separated account file (passwd, shadow, group, gshadow).

@@ -22,10 +22,10 @@ import (
 	"gioui.org/widget/material"
 
 	"github.com/Zainium-Dynamics/zainium-installer/assets"
-	"github.com/Zainium-Dynamics/zainium-installer/internal/catalog"
-	"github.com/Zainium-Dynamics/zainium-installer/internal/disk"
-	"github.com/Zainium-Dynamics/zainium-installer/internal/plan"
-	"github.com/Zainium-Dynamics/zainium-installer/internal/target"
+	"github.com/Zainium-Dynamics/zainium-installer/pkg/catalog"
+	"github.com/Zainium-Dynamics/zainium-installer/pkg/disk"
+	"github.com/Zainium-Dynamics/zainium-installer/pkg/plan"
+	"github.com/Zainium-Dynamics/zainium-installer/pkg/target"
 )
 
 const (
@@ -263,6 +263,8 @@ func (a *App) Plan() plan.Plan {
 	if a.diskSel >= 0 {
 		p.Disk = a.disks[a.diskSel].Path
 		p.Alongside = a.alongside.Value && a.canAlongside(a.disks[a.diskSel])
+		// a whole USB drive becomes a Zainium OS that starts on any computer
+		p.Portable = a.disks[a.diskSel].USB && !p.Alongside
 	}
 	if a.encrypt.Value {
 		p.Encrypt = a.encPw.Text()

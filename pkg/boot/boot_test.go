@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Zainium-Dynamics/zainium-installer/internal/disk"
+	"github.com/Zainium-Dynamics/zainium-installer/pkg/disk"
 )
 
 func TestConfigFromStaging(t *testing.T) {

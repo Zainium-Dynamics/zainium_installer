@@ -10,8 +10,8 @@ import (
 	"gioui.org/layout"
 	"gioui.org/unit"
 
-	"github.com/Zainium-Dynamics/zainium-installer/internal/disk"
-	"github.com/Zainium-Dynamics/zainium-installer/internal/plan"
+	"github.com/Zainium-Dynamics/zainium-installer/pkg/disk"
+	"github.com/Zainium-Dynamics/zainium-installer/pkg/plan"
 )
 
 var spokeTitles = map[page]string{

@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/Zainium-Dynamics/zainium-installer/internal/catalog"
+	"github.com/Zainium-Dynamics/zainium-installer/pkg/catalog"
 )
 
 type User struct {
@@ -41,6 +41,10 @@ type Plan struct {
 	// Encrypt, when set, is the passphrase the root partition is encrypted with (LUKS2).
 	// It is asked for at every start, before the system boots.
 	Encrypt string `json:"encrypt,omitempty"`
+	// Portable is for a USB drive that should start any computer: Limine's UEFI and BIOS
+	// stages both go on it, and the firmware of the computer doing the install is left alone
+	// (no boot entry, no change to its boot order).
+	Portable bool `json:"portable,omitempty"`
 }
 
 var (

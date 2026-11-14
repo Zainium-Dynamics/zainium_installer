@@ -9,8 +9,8 @@ import (
 	"gioui.org/unit"
 	"gioui.org/widget"
 
-	"github.com/Zainium-Dynamics/zainium-installer/internal/disk"
-	"github.com/Zainium-Dynamics/zainium-installer/internal/plan"
+	"github.com/Zainium-Dynamics/zainium-installer/pkg/disk"
+	"github.com/Zainium-Dynamics/zainium-installer/pkg/plan"
 )
 
 type tile struct {
