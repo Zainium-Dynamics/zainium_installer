@@ -12,7 +12,6 @@ import (
 	"io"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 
 	"github.com/Zainium-Dynamics/zainium-installer/internal/disk"
@@ -64,7 +63,7 @@ func main() {
 
 	var out io.Writer = os.Stdout
 	if *text {
-		out = &textWriter{w: os.Stdout}
+		out = &progress.TextWriter{W: os.Stdout}
 	}
 	r := progress.NewReporter(out)
 	e := &engine.Engine{Plan: p, R: r, Source: *source, DryRun: *dryRun}
@@ -78,27 +77,4 @@ func main() {
 func fatal(err error) {
 	fmt.Fprintln(os.Stderr, "zainium-install:", err)
 	os.Exit(1)
-}
-
-// textWriter turns the JSON lines into readable output for a terminal.
-type textWriter struct{ w io.Writer }
-
-func (t *textWriter) Write(b []byte) (int, error) {
-	for _, line := range strings.Split(strings.TrimSpace(string(b)), "\n") {
-		var ev progress.Event
-		if json.Unmarshal([]byte(line), &ev) != nil {
-			continue
-		}
-		switch {
-		case ev.Error != "":
-			fmt.Fprintf(t.w, "FAILED: %s\n", ev.Error)
-		case ev.Done:
-			fmt.Fprintln(t.w, "[100%] Installation complete")
-		case ev.Log != "":
-			fmt.Fprintf(t.w, "       %s\n", ev.Log)
-		default:
-			fmt.Fprintf(t.w, "[%3.0f%%] %s\n", ev.Percent, ev.Message)
-		}
-	}
-	return len(b), nil
 }

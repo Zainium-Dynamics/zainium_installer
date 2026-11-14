@@ -263,6 +263,8 @@ func (a *App) Plan() plan.Plan {
 	if a.diskSel >= 0 {
 		p.Disk = a.disks[a.diskSel].Path
 		p.Alongside = a.alongside.Value && a.canAlongside(a.disks[a.diskSel])
+		// a whole USB drive becomes a Zainium OS that starts on any computer
+		p.Portable = a.disks[a.diskSel].USB && !p.Alongside
 	}
 	if a.encrypt.Value {
 		p.Encrypt = a.encPw.Text()

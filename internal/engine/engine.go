@@ -578,14 +578,18 @@ func (e *Engine) boot() error {
 			return err
 		}
 	} else if out, err := boot.BIOSInstall(e.Plan.Disk, disk.PartBIOSBoot); err != nil {
-		if e.Plan.BIOS || !boot.UEFI() {
+		if (e.Plan.BIOS || !boot.UEFI()) && !e.Plan.Portable {
 			return fmt.Errorf("limine bios-install: %v: %s", err, out)
 		}
 		e.logf("BIOS boot not installed (UEFI still works): %v %s", err, out)
 	} else {
 		e.logf("BIOS boot code installed")
 	}
-	if boot.UEFI() {
+	if e.Plan.Portable {
+		// a USB drive starts from its removable-media path EFI/BOOT/BOOTX64.EFI on any computer;
+		// this computer's own boot order stays as it was
+		e.logf("portable: no UEFI boot entry added on this computer")
+	} else if boot.UEFI() {
 		name, err := boot.AddBootEntry("Zainium OS", uint32(e.espNum), e.layout.Parts[e.espNum-1], "/EFI/BOOT/BOOTX64.EFI")
 		if err != nil {
 			// the firmware still finds the removable-media path EFI/BOOT/BOOTX64.EFI
