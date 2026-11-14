@@ -44,6 +44,10 @@ type Engine struct {
 	// Source is a directory holding the live image tree; empty finds the live erofs.
 	Source string
 	DryRun bool
+	// Staging means Plan.Disk is the loop device of an image file the caller made (terrarium
+	// builds a USB drive on the computer's own disk and writes it to the drive afterwards):
+	// it is not looked up among the disks and is always usable.
+	Staging bool
 
 	mounts   []string // unmounted in reverse on exit
 	disk     disk.Disk
@@ -102,21 +106,28 @@ func (e *Engine) check() error {
 	if os.Geteuid() != 0 && !e.DryRun {
 		return errors.New("the installer engine must run as root")
 	}
-	disks, err := disk.List()
-	if err != nil {
-		return err
-	}
-	found := false
-	for _, d := range disks {
-		if d.Path == e.Plan.Disk {
-			e.disk, found = d, true
+	var err error
+	if e.Staging {
+		if e.disk, err = stagingDisk(e.Plan.Disk); err != nil {
+			return err
 		}
-	}
-	if !found {
-		return fmt.Errorf("%s is not a disk on this machine", e.Plan.Disk)
-	}
-	if ok, why := e.disk.Usable(); !ok {
-		return fmt.Errorf("cannot install to %s: %s", e.disk.Title(), why)
+	} else {
+		disks, lerr := disk.List()
+		if lerr != nil {
+			return lerr
+		}
+		found := false
+		for _, d := range disks {
+			if d.Path == e.Plan.Disk {
+				e.disk, found = d, true
+			}
+		}
+		if !found {
+			return fmt.Errorf("%s is not a disk on this machine", e.Plan.Disk)
+		}
+		if ok, why := e.disk.Usable(); !ok {
+			return fmt.Errorf("cannot install to %s: %s", e.disk.Title(), why)
+		}
 	}
 	e.logf("target: %s, %s", e.disk.Title(), disk.HumanSize(e.disk.Size))
 
@@ -319,7 +330,24 @@ func swapoff(dev string) {
 	}
 }
 
+// stagingDisk describes the loop device of a staging image.
+func stagingDisk(dev string) (disk.Disk, error) {
+	f, err := os.Open(dev)
+	if err != nil {
+		return disk.Disk{}, err
+	}
+	defer f.Close()
+	ss, n, err := disk.Geometry(f)
+	if err != nil {
+		return disk.Disk{}, err
+	}
+	return disk.Disk{Name: filepath.Base(dev), Path: dev, Size: ss * int64(n)}, nil
+}
+
 func (e *Engine) refreshDisk() (disk.Disk, error) {
+	if e.Staging {
+		return e.disk, nil
+	}
 	disks, err := disk.List()
 	if err != nil {
 		return disk.Disk{}, err
