@@ -14,10 +14,10 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/Zainium-Dynamics/zainium-installer/internal/disk"
-	"github.com/Zainium-Dynamics/zainium-installer/internal/engine"
-	"github.com/Zainium-Dynamics/zainium-installer/internal/plan"
-	"github.com/Zainium-Dynamics/zainium-installer/internal/progress"
+	"github.com/Zainium-Dynamics/zainium-installer/pkg/disk"
+	"github.com/Zainium-Dynamics/zainium-installer/pkg/engine"
+	"github.com/Zainium-Dynamics/zainium-installer/pkg/plan"
+	"github.com/Zainium-Dynamics/zainium-installer/pkg/progress"
 )
 
 func main() {

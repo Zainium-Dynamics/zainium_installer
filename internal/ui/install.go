@@ -14,7 +14,7 @@ import (
 	"gioui.org/layout"
 	"gioui.org/widget/material"
 
-	"github.com/Zainium-Dynamics/zainium-installer/internal/progress"
+	"github.com/Zainium-Dynamics/zainium-installer/pkg/progress"
 )
 
 // Engine is the root-side installer, started through pkexec.

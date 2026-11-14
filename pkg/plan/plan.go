@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/Zainium-Dynamics/zainium-installer/internal/catalog"
+	"github.com/Zainium-Dynamics/zainium-installer/pkg/catalog"
 )
 
 type User struct {

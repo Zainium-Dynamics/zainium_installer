@@ -11,7 +11,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"github.com/Zainium-Dynamics/zainium-installer/internal/disk"
+	"github.com/Zainium-Dynamics/zainium-installer/pkg/disk"
 )
 
 const (

@@ -18,13 +18,13 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"github.com/Zainium-Dynamics/zainium-installer/internal/boot"
-	"github.com/Zainium-Dynamics/zainium-installer/internal/copytree"
-	"github.com/Zainium-Dynamics/zainium-installer/internal/disk"
-	"github.com/Zainium-Dynamics/zainium-installer/internal/fat"
-	"github.com/Zainium-Dynamics/zainium-installer/internal/plan"
-	"github.com/Zainium-Dynamics/zainium-installer/internal/progress"
-	"github.com/Zainium-Dynamics/zainium-installer/internal/target"
+	"github.com/Zainium-Dynamics/zainium-installer/pkg/boot"
+	"github.com/Zainium-Dynamics/zainium-installer/pkg/copytree"
+	"github.com/Zainium-Dynamics/zainium-installer/pkg/disk"
+	"github.com/Zainium-Dynamics/zainium-installer/pkg/fat"
+	"github.com/Zainium-Dynamics/zainium-installer/pkg/plan"
+	"github.com/Zainium-Dynamics/zainium-installer/pkg/progress"
+	"github.com/Zainium-Dynamics/zainium-installer/pkg/target"
 )
 
 const (

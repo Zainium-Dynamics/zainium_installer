@@ -18,7 +18,7 @@ engine:
 	CGO_ENABLED=0 go build $(GOFLAGS) -ldflags='-s -w' -o $(BUILD)/zainium-install ./cmd/zainium-install
 
 test:
-	go test $$(go list ./internal/... | grep -v /ui)
+	go test $$(go list ./pkg/...)
 
 $(BUILD)/pkg-config:
 	mkdir -p $(BUILD)
