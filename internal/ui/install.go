@@ -127,7 +127,7 @@ func (a *App) runEngine(in *installer, p any) error {
 	return err
 }
 
-var stepOrder = []string{progress.Check, progress.Partition, progress.Format, progress.Mount, progress.Copy, progress.Boot, progress.Configure, progress.Finish}
+var stepOrder = []string{progress.Check, progress.Partition, progress.Format, progress.Mount, progress.Copy, progress.Boot, progress.Configure, progress.Secure, progress.Finish}
 
 func (a *App) layoutInstall(gtx layout.Context) {
 	st := a.inst.snapshot()

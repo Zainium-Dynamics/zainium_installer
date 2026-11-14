@@ -33,7 +33,7 @@ func Kernel(zaisys string) (string, error) {
 	var found []string
 	for _, e := range entries {
 		n := e.Name()
-		if !e.Type().IsRegular() || n == FallbackKernel || strings.HasSuffix(n, ".img") {
+		if !e.Type().IsRegular() || n == FallbackKernel || strings.HasSuffix(n, ".img") || strings.HasSuffix(n, ".toml") {
 			continue
 		}
 		found = append(found, n)

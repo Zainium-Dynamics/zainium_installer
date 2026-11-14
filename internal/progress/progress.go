@@ -25,6 +25,7 @@ const (
 	Copy      = "copy"
 	Boot      = "boot"
 	Configure = "configure"
+	Secure    = "secure"
 	Finish    = "finish"
 )
 
@@ -36,6 +37,7 @@ var Titles = map[string]string{
 	Copy:      "Copying Zainium OS",
 	Boot:      "Installing the boot loader",
 	Configure: "Setting up your system",
+	Secure:    "Securing the system",
 	Finish:    "Finishing",
 }
 
