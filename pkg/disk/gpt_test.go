@@ -65,3 +65,40 @@ func TestWriteImage(t *testing.T) {
 		t.Fatalf("sfdisk does not see our partitions:\n%s", out)
 	}
 }
+
+func TestActiveMBR(t *testing.T) {
+	for _, active := range []bool{false, true} {
+		img := filepath.Join(t.TempDir(), "disk.img")
+		f, err := os.Create(img)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := f.Truncate(4 << 30); err != nil {
+			t.Fatal(err)
+		}
+		ss, n, err := Geometry(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		l, err := PlanLayout(ss, n, 256<<20)
+		if err != nil {
+			t.Fatal(err)
+		}
+		l.ActiveMBR = active
+		if err := l.Write(f); err != nil {
+			t.Fatal(err)
+		}
+		mbr := make([]byte, 512)
+		if _, err := f.ReadAt(mbr, 0); err != nil {
+			t.Fatal(err)
+		}
+		f.Close()
+		want := byte(0x00)
+		if active {
+			want = 0x80
+		}
+		if mbr[446] != want || mbr[446+4] != 0xEE || mbr[510] != 0x55 || mbr[511] != 0xAA {
+			t.Fatalf("active=%v: boot flag %#x, type %#x, signature %#x%x", active, mbr[446], mbr[450], mbr[510], mbr[511])
+		}
+	}
+}
