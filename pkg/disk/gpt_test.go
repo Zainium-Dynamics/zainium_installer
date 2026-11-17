@@ -56,6 +56,10 @@ func TestWriteImage(t *testing.T) {
 		t.Skip("no sfdisk")
 	}
 	out, err := exec.Command(sfdisk, "--verify", img).CombinedOutput()
+	// util-linux's sfdisk, not a smaller one without --verify (Zainium's userutiles)
+	if err != nil && strings.Contains(string(out), "--verify") {
+		t.Skipf("this sfdisk cannot verify: %s", strings.TrimSpace(string(out)))
+	}
 	if err != nil || strings.Contains(string(out), "corrupt") {
 		t.Fatalf("sfdisk --verify: %v\n%s", err, out)
 	}
