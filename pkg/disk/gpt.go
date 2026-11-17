@@ -93,6 +93,10 @@ type Layout struct {
 	Sectors    uint64
 	DiskGUID   GUID
 	Parts      []Partition
+	// ActiveMBR marks the protective MBR's partition active. Some legacy BIOSes, older Dell
+	// laptops among them, boot no disk whose MBR has no active partition; UEFI wants it
+	// cleared, so it is set only for a legacy BIOS install.
+	ActiveMBR bool
 }
 
 const (
@@ -223,6 +227,9 @@ func (l *Layout) writeTables(f *os.File, protectiveMBR bool) error {
 
 	mbr := make([]byte, ss)
 	pe := mbr[446:]
+	if l.ActiveMBR {
+		pe[0] = 0x80
+	}
 	pe[1], pe[2], pe[3] = 0x00, 0x02, 0x00 // CHS of LBA 1
 	pe[4] = 0xEE
 	pe[5], pe[6], pe[7] = 0xFF, 0xFF, 0xFF

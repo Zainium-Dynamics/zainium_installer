@@ -286,6 +286,10 @@ func (e *Engine) partition() error {
 		for i, p := range e.layout.Parts {
 			e.logf("partition %d: %s, %s", i+1, p.Name, disk.HumanSize(p.Size(ss)))
 		}
+		if (e.Plan.BIOS || !boot.UEFI()) && !e.Plan.Portable {
+			e.layout.ActiveMBR = true
+			e.logf("legacy BIOS: the protective MBR is marked active")
+		}
 		if err := e.layout.Write(f); err != nil {
 			return fmt.Errorf("writing partition table: %w", err)
 		}
