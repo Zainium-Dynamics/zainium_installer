@@ -286,7 +286,14 @@ func (e *Engine) partition() error {
 		for i, p := range e.layout.Parts {
 			e.logf("partition %d: %s, %s", i+1, p.Name, disk.HumanSize(p.Size(ss)))
 		}
-		if (e.Plan.BIOS || !boot.UEFI()) && !e.Plan.Portable {
+		// A portable drive moves between machines, so the target firmware is unknown: mark the
+		// protective MBR active so legacy-BIOS machines boot it too (many old and USB-boot BIOSes
+		// boot no disk whose MBR has no active partition). UEFI reads the GPT, not the MBR, so it
+		// is unaffected. A fixed-disk install marks it active only for a known legacy BIOS.
+		if e.Plan.Portable {
+			e.layout.ActiveMBR = true
+			e.logf("portable: the protective MBR is marked active so legacy-BIOS machines boot it too")
+		} else if e.Plan.BIOS || !boot.UEFI() {
 			e.layout.ActiveMBR = true
 			e.logf("legacy BIOS: the protective MBR is marked active")
 		}
